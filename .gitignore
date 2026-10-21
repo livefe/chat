@@ -1,0 +1,30 @@
+# 通用
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+logs/
+
+# chat-h5 / chat-admin
+node_modules/
+dist/
+*.tsbuildinfo
+.eslintcache
+*.local
+
+# chat-android
+.gradle/
+.kotlin/
+build/
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties
+chat-android/app/libs/*.aar
+chat-android/app/libs/*.jar
+
+# chat-server
+chat-server/data/
+chat-server/configs/.env

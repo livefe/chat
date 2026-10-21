@@ -1,0 +1,14 @@
+package com.nearby.chat.core.theme
+
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+
+object AppSpacing {
+    val Xxs: Dp = 2.dp
+    val Xs: Dp = 4.dp
+    val S: Dp = 8.dp
+    val M: Dp = 12.dp
+    val L: Dp = 16.dp
+    val Xl: Dp = 20.dp
+    val Xxl: Dp = 24.dp
+}

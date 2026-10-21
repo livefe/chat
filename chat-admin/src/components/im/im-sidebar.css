@@ -1,0 +1,215 @@
+.im-shell {
+  --im-bg: #f0f2f5;
+  --im-panel: #ffffff;
+  --im-border: #e8eaed;
+  --im-text: #1f2329;
+  --im-text-secondary: #8f959e;
+  --im-bubble-peer: #ffffff;
+  --im-bubble-mine: var(--el-color-primary);
+  --im-bubble-mine-text: #ffffff;
+  --im-sidebar-w: 320px;
+  --im-radius: 12px;
+
+  display: flex;
+  height: calc(100vh - 104px);
+  min-height: 560px;
+  background: var(--im-panel);
+  border: 1px solid var(--im-border);
+  border-radius: var(--im-radius);
+  overflow: hidden;
+}
+
+.im-sidebar {
+  width: var(--im-sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--im-border);
+  background: #fafbfc;
+  min-width: 0;
+}
+
+.im-sidebar__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 12px 8px;
+}
+
+.im-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--im-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.im-tab:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--im-text);
+}
+
+.im-tab.is-active {
+  background: #fff;
+  color: var(--el-color-primary);
+  box-shadow: 0 1px 3px rgba(31, 35, 41, 0.08);
+}
+
+.im-tab__count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e8eaed;
+  color: var(--im-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.im-tab.is-active .im-tab__count {
+  background: color-mix(in srgb, var(--el-color-primary) 16%, transparent);
+  color: var(--el-color-primary);
+}
+
+.im-tab__count.is-warn {
+  background: color-mix(in srgb, var(--el-color-danger) 14%, transparent);
+  color: var(--el-color-danger);
+}
+
+.im-sidebar__search {
+  padding: 0 12px 10px;
+}
+
+.im-sidebar__list {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.im-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.12s;
+}
+
+.im-list-item:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.im-list-item:disabled {
+  background: transparent;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.im-list-item.is-active {
+  background: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
+}
+
+.im-list-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--el-color-primary);
+}
+
+.im-list-item__avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.im-list-item__online {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--el-color-success);
+  border: 2px solid #fafbfc;
+}
+
+.im-list-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.im-list-item__top,
+.im-list-item__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.im-list-item__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--im-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.im-list-item__time,
+.im-list-item__preview {
+  font-size: 12px;
+  color: var(--im-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.im-list-item__preview {
+  flex: 1;
+}
+
+.im-list-item__wait {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.im-list-item__wait.is-ok {
+  color: var(--el-color-success);
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
+}
+
+.im-list-item__wait.is-warn {
+  color: var(--el-color-warning);
+  background: color-mix(in srgb, var(--el-color-warning) 14%, transparent);
+}
+
+.im-list-item__wait.is-danger {
+  color: var(--el-color-danger);
+  background: color-mix(in srgb, var(--el-color-danger) 12%, transparent);
+}
+
+.im-list-item__action {
+  flex-shrink: 0;
+}

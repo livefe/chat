@@ -1,0 +1,26 @@
+:root {
+  --el-color-primary: #4c8dff;
+  --el-color-primary-light-3: #7eb0ff;
+  --el-color-primary-light-5: #a8c9ff;
+  --el-color-primary-light-7: #cddfff;
+  --el-color-primary-light-8: #dfeaff;
+  --el-color-primary-light-9: #eef4ff;
+  --el-color-primary-dark-2: #2a6bd8;
+  --el-color-danger: #e05a52;
+  --el-color-success: #36b37e;
+  --el-color-warning: #e09a45;
+
+  --admin-sidebar-width: 210px;
+  --admin-sidebar-bg: #f5f5f5;
+  --admin-sidebar-logo-bg: #eeeeee;
+  --admin-sidebar-text: #666666;
+  --admin-sidebar-text-hover: #303133;
+  --admin-sidebar-hover-bg: rgba(0, 0, 0, 0.06);
+  --admin-sidebar-active: var(--el-color-primary);
+  --admin-sidebar-active-bg: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
+  --admin-content-bg: #f5f5f5;
+  --admin-header-bg: #ffffff;
+  --admin-logo-text: #1f2329;
+  --admin-page-gap: 16px;
+  --admin-card-radius: 10px;
+}

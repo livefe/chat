@@ -1,0 +1,99 @@
+.layout-container {
+  height: 100vh;
+}
+
+.layout-container .sidebar {
+  background-color: var(--admin-sidebar-bg);
+  border-right: 1px solid var(--el-border-color-lighter);
+  box-shadow: none;
+  transition: width 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.layout-container .logo {
+  height: 56px;
+  line-height: 56px;
+  text-align: center;
+  color: var(--admin-logo-text);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  background-color: var(--admin-sidebar-logo-bg);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
+}
+
+.layout-container .sidebar-menu {
+  border: none;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  --el-menu-hover-bg-color: var(--admin-sidebar-hover-bg);
+  --el-menu-hover-text-color: var(--admin-sidebar-text-hover);
+  --el-menu-active-color: var(--admin-sidebar-active);
+}
+
+.layout-container .sidebar-menu:not(.el-menu--collapse) {
+  width: var(--admin-sidebar-width);
+}
+
+.layout-container .sidebar-menu .el-menu-item,
+.layout-container .sidebar-menu .el-sub-menu__title {
+  border-radius: 6px;
+  margin: 2px 8px;
+  width: auto;
+  height: 44px;
+  line-height: 44px;
+}
+
+.layout-container .sidebar-menu .el-menu-item:hover,
+.layout-container .sidebar-menu .el-sub-menu__title:hover {
+  background-color: var(--admin-sidebar-hover-bg) !important;
+  color: var(--admin-sidebar-text-hover) !important;
+}
+
+.layout-container .sidebar-menu .el-menu-item.is-active {
+  background-color: var(--admin-sidebar-active-bg) !important;
+  color: var(--admin-sidebar-active) !important;
+  font-weight: 600;
+}
+
+.layout-container .sidebar-menu .el-menu-item.is-active:hover {
+  background-color: color-mix(in srgb, var(--el-color-primary) 14%, transparent) !important;
+  color: var(--admin-sidebar-active) !important;
+}
+
+.layout-container .sidebar-menu .el-sub-menu .el-menu-item {
+  padding-left: 48px !important;
+  min-width: auto;
+}
+
+.layout-container .header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  background-color: var(--admin-header-bg);
+  border-bottom: 1px solid var(--el-border-color-light);
+  padding: 0 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.layout-container .user-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+}
+
+.layout-container .main-content {
+  background-color: var(--admin-content-bg);
+  padding: 16px 20px 20px;
+  overflow: auto;
+}

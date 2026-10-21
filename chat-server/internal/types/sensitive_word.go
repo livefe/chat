@@ -1,0 +1,60 @@
+package types
+
+type SensitiveWordListRequest struct {
+	Word     string `form:"word"`
+	Category string `form:"category"`
+	Status   *uint8 `form:"status"`
+	Page     int    `form:"page" binding:"required,min=1"`
+	PageSize int    `form:"pageSize" binding:"required,min=1,max=100"`
+}
+
+type SensitiveWordItem struct {
+	ID           uint   `json:"id"`
+	Word         string `json:"word"`
+	Category     string `json:"category"`
+	CategoryText string `json:"categoryText"`
+	Level        uint8  `json:"level"`
+	LevelText    string `json:"levelText"`
+	Action       uint8  `json:"action"`
+	ActionText   string `json:"actionText"`
+	Status       uint8  `json:"status"`
+	StatusText   string `json:"statusText"`
+	Remark       string `json:"remark"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
+}
+
+type SensitiveWordListResponse struct {
+	Total int64               `json:"total"`
+	List  []SensitiveWordItem `json:"list"`
+}
+
+type CreateSensitiveWordRequest struct {
+	Word     string `json:"word" binding:"required,max=64"`
+	Category string `json:"category" binding:"omitempty,max=32"`
+	Level    uint8  `json:"level" binding:"required,oneof=1 2 3"`
+	Action   uint8  `json:"action" binding:"required,oneof=1"`
+	Status   uint8  `json:"status" binding:"oneof=0 1"`
+	Remark   string `json:"remark" binding:"omitempty,max=255"`
+}
+
+type UpdateSensitiveWordRequest struct {
+	ID uint `json:"id" binding:"required"`
+	CreateSensitiveWordRequest
+}
+
+type UpdateSensitiveWordStatusRequest struct {
+	ID     uint  `json:"id" binding:"required"`
+	Status uint8 `json:"status" binding:"oneof=0 1"`
+}
+
+type ImportSensitiveWordsRequest struct {
+	Words    string `json:"words" binding:"required"`
+	Category string `json:"category" binding:"omitempty,max=32"`
+	Level    uint8  `json:"level" binding:"required,oneof=1 2 3"`
+}
+
+type ImportSensitiveWordsResponse struct {
+	Created int `json:"created"`
+	Skipped int `json:"skipped"`
+}

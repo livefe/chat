@@ -1,0 +1,101 @@
+env: "dev"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 180
+  write_timeout: 180
+  idle_timeout: 60
+
+log:
+  level: "info"
+  encoding: "json"
+  time_format: "2006-01-02 15:04:05.000"
+  output_path: "./logs"
+  filename: "app.log"
+  max_size: 100
+  max_age: 30
+  max_backups: 10
+  compress: true
+  console_output: true
+
+database:
+  driver: "mysql"
+  host: "mysql"
+  port: 3306
+  username: "root"
+  password: "123456"
+  dbname: "app"
+  charset: "utf8mb4"
+  parse_time: true
+  loc: "Local"
+  max_idle_conns: 50
+  max_open_conns: 200
+  conn_max_lifetime: 3600
+  slow_threshold_ms: 200
+
+cache:
+  host: "redis"
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 200
+  min_idle_conns: 20
+  max_retries: 3
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_timeout: 4s
+  conn_max_idle_time: 300s
+  conn_max_lifetime: 0s
+
+auth:
+  secret: "local-dev-jwt-secret-change-me"
+  expiration: 168h
+  refresh_expiration: 720h
+  issuer: "app-center"
+
+websocket:
+  max_connections: 10000
+  heartbeat_interval: 15s
+  read_deadline: 60s
+  write_deadline: 10s
+  send_buffer: 512
+  max_message_size: 4096
+  read_buffer_size: 4096
+  write_buffer_size: 4096
+  allow_origins:
+    - "*"
+
+sms:
+  provider: "mock"
+  aliyun:
+    access_key_id: "your_access_key_id"
+    access_key_secret: "your_access_key_secret"
+    endpoint: "dysmsapi.aliyuncs.com"
+    region_id: "cn-hangzhou"
+
+storage:
+  provider: "local"
+  max_size_mb: 10
+  max_video_size_mb: 50
+  max_audio_size_mb: 5
+  path_prefix: "uploads"
+  orphan_ttl_hours: 24
+  tencent:
+    secret_id: ""
+    secret_key: ""
+    region: "ap-guangzhou"
+    default_bucket: ""
+    use_domain_map: false
+    buckets: {}
+
+push:
+  xiaomi:
+    app_secret: "test-xiaomi-app-secret"
+    package_name: "com.nearby.chat"
+    channel_id: "private_chat"
+
+ad:
+  token_secret: "ad-dev-token-secret-change-me"
+  token_ttl_seconds: 3600

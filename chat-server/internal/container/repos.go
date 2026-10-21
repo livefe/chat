@@ -1,0 +1,91 @@
+package container
+
+import "app/internal/repository"
+
+type Repos struct {
+	User                 repository.UserRepository
+	Employee             repository.EmployeeRepository
+	SMSRecord            repository.SMSRecordRepository
+	UserLoginRecord      repository.UserLoginRecordRepository
+	EmployeeLoginRecord  repository.EmployeeLoginRecordRepository
+	Role                 repository.RoleRepository
+	Department           repository.DepartmentRepository
+	Permission           repository.PermissionRepository
+	EmployeeRole         repository.EmployeeRoleRepository
+	RolePermission       repository.RolePermissionRepository
+	Room                 repository.RoomRepository
+	Message              repository.MessageRepository
+	Conversation         repository.ConversationRepository
+	ConversationDeletion repository.ConversationDeletionRepository
+	ConversationPin      repository.ConversationPinRepository
+	UserBlock            repository.UserBlockRepository
+	SensitiveWord        repository.SensitiveWordRepository
+	Post                 repository.PostRepository
+	PostExtra            repository.PostExtraRepository
+	PostSignup           repository.PostSignupRepository
+	Feedback             repository.FeedbackRepository
+	Report               repository.ReportRepository
+	UserDeactivationLog  repository.UserDeactivationLogRepository
+	AuditLog             repository.AuditLogRepository
+	Region               repository.RegionRepository
+	Device               repository.DeviceRepository
+	AppRelease           repository.AppReleaseRepository
+	AppUpdatePolicy      repository.AppUpdatePolicyRepository
+	MediaAsset           repository.MediaAssetRepository
+	MediaUsage           repository.MediaUsageRepository
+	AdCampaign           repository.AdCampaignRepository
+	AdEvent              repository.AdEventRepository
+	AdDailyStat          repository.AdDailyStatRepository
+	Config               repository.ConfigRepository
+	IMConversation       repository.IMConversationRepository
+	IMMember             repository.IMMemberRepository
+	IMMessage            repository.IMMessageRepository
+	IMStaffDMPair        repository.IMStaffDMPairRepository
+	IMSupportState       repository.IMSupportStateRepository
+	IMSupportConfig      repository.IMSupportConfigRepository
+}
+
+func buildRepos(in *Infra) *Repos {
+	return &Repos{
+		User:                 repository.NewUserRepository(in.DB),
+		Employee:             repository.NewEmployeeRepository(in.DB),
+		SMSRecord:            repository.NewSMSRecordRepository(in.DB),
+		UserLoginRecord:      repository.NewUserLoginRecordRepository(in.DB),
+		EmployeeLoginRecord:  repository.NewEmployeeLoginRecordRepository(in.DB),
+		Role:                 repository.NewRoleRepository(in.DB),
+		Department:           repository.NewDepartmentRepository(in.DB),
+		Permission:           repository.NewPermissionRepository(in.DB),
+		EmployeeRole:         repository.NewEmployeeRoleRepository(in.DB),
+		RolePermission:       repository.NewRolePermissionRepository(in.DB),
+		Room:                 repository.NewRoomRepository(in.DB),
+		Message:              repository.NewMessageRepository(in.DB),
+		Conversation:         repository.NewConversationRepository(in.DB),
+		ConversationDeletion: repository.NewConversationDeletionRepository(in.DB),
+		ConversationPin:      repository.NewConversationPinRepository(in.DB),
+		UserBlock:            repository.NewUserBlockRepository(in.DB),
+		SensitiveWord:        repository.NewSensitiveWordRepository(in.DB),
+		Post:                 repository.NewPostRepository(in.DB),
+		PostExtra:            repository.NewPostExtraRepository(in.DB),
+		PostSignup:           repository.NewPostSignupRepository(in.DB),
+		Feedback:             repository.NewFeedbackRepository(in.DB),
+		Report:               repository.NewReportRepository(in.DB),
+		UserDeactivationLog:  repository.NewUserDeactivationLogRepository(in.DB),
+		AuditLog:             repository.NewAuditLogRepository(in.DB),
+		Region:               repository.NewRegionRepository(in.DB),
+		Device:               repository.NewDeviceRepository(in.DB),
+		AppRelease:           repository.NewAppReleaseRepository(in.DB),
+		AppUpdatePolicy:      repository.NewAppUpdatePolicyRepository(in.DB),
+		MediaAsset:           repository.NewMediaAssetRepository(in.DB),
+		MediaUsage:           repository.NewMediaUsageRepository(in.DB),
+		AdCampaign:           repository.NewAdCampaignRepository(in.DB),
+		AdEvent:              repository.NewAdEventRepository(in.DB),
+		AdDailyStat:          repository.NewAdDailyStatRepository(in.DB),
+		Config:               repository.NewConfigRepository(in.DB),
+		IMConversation:       repository.NewIMConversationRepository(in.DB),
+		IMMember:             repository.NewIMMemberRepository(in.DB),
+		IMMessage:            repository.NewIMMessageRepository(in.DB),
+		IMStaffDMPair:        repository.NewIMStaffDMPairRepository(in.DB),
+		IMSupportState:       repository.NewIMSupportStateRepository(in.DB),
+		IMSupportConfig:      repository.NewIMSupportConfigRepository(in.DB),
+	}
+}

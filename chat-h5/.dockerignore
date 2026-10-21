@@ -1,0 +1,25 @@
+﻿# VCS / IDE
+.git
+.idea
+.vscode
+*.swp
+*~
+
+# Dependencies & build output (rebuilt in image)
+node_modules
+dist
+.vite
+coverage
+*.tsbuildinfo
+
+# Logs & caches
+*.log
+npm-debug.log*
+.eslintcache
+
+# Not needed for `npm run build`
+eslint.config.js
+
+# Docker meta (not COPY'd into the image)
+Dockerfile
+.dockerignore

@@ -1,0 +1,40 @@
+# VCS / IDE
+.git
+.idea
+.vscode
+*.swp
+*~
+
+# Local runtime / build artifacts
+data
+logs
+tmp
+bin
+dist
+vendor
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+*.pprof
+coverage.*
+coverage.out
+coverage.html
+
+# Logs
+*.log
+
+# Secrets & local overrides (image only needs config.yaml / scheduler.yaml)
+configs/.env
+.env
+.env.*
+
+# Seed SQL is applied manually, not baked into the image
+scripts
+
+# Docker meta (not COPY'd into the image)
+Dockerfile
+.dockerignore
