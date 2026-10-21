@@ -277,8 +277,6 @@ func messageItem(m *model.Message, profile types.UserProfile, hasProfile bool) t
 		ContentType: m.ContentType,
 		Content:     m.Content,
 		ReplyToID:   m.ReplyToID,
-		Latitude:    m.Latitude,
-		Longitude:   m.Longitude,
 		CreatedAt:   m.CreatedAt.Unix(),
 		Recalled:    m.Recalled != 0,
 	}

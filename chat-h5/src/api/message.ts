@@ -15,8 +15,6 @@ export interface MessageItem {
   replyToFromName?: string
   replyToContentType?: number
   replyToContent?: string
-  latitude: number
-  longitude: number
   createdAt: number
   recalled?: boolean
 

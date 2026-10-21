@@ -1,11 +1,13 @@
 package com.nearby.chat.feature.navigation
 
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.nearby.chat.R
 import com.nearby.chat.feature.account.AccountDeactivateScreen
 import com.nearby.chat.feature.account.BlockListScreen
 import com.nearby.chat.feature.account.EditMobileScreen
@@ -72,10 +74,18 @@ internal fun NavGraphBuilder.accountGraph(
     }
     composable(Routes.SETTINGS) {
         val updateState by updateViewModel.uiState.collectAsStateWithLifecycle()
+        val userAgreementTitle = stringResource(R.string.h5_user_agreement)
+        val privacyPolicyTitle = stringResource(R.string.h5_privacy_policy)
         SettingsScreen(
             onBack = navigator::back,
             onOpenBlocks = { navigator.navigate(Routes.BLOCK_LIST) },
             onOpenDeactivate = { navigator.navigate(Routes.ACCOUNT_DEACTIVATE) },
+            onOpenUserAgreement = {
+                navigator.navigate(Routes.h5Web(Routes.H5_AGREEMENT_USER, userAgreementTitle))
+            },
+            onOpenPrivacyPolicy = {
+                navigator.navigate(Routes.h5Web(Routes.H5_AGREEMENT_PRIVACY, privacyPolicyTitle))
+            },
             onCheckUpdate = updateViewModel::checkManual,
             checkingUpdate = updateState.checking,
         )

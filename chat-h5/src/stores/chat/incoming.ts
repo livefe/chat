@@ -122,8 +122,6 @@ export function createIncomingHandler(deps: IncomingDeps) {
         replyToFromName: payload.replyToFromName,
         replyToContentType: payload.replyToContentType,
         replyToContent: payload.replyToContent,
-        latitude: payload.latitude,
-        longitude: payload.longitude,
         createdAt: payload.createdAt,
         recalled: payload.recalled,
       }

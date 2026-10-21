@@ -29,6 +29,8 @@ type Config struct {
 	ConsoleOutput bool   `mapstructure:"console_output"`
 }
 
+const MinRetentionDays = 180
+
 func (c *Config) Validate() error {
 	if strings.TrimSpace(c.Level) == "" {
 		return fmt.Errorf("log.level 未配置")
@@ -50,8 +52,8 @@ func (c *Config) Validate() error {
 	if c.MaxSize <= 0 {
 		return fmt.Errorf("log.max_size 未配置")
 	}
-	if c.MaxAge <= 0 {
-		return fmt.Errorf("log.max_age 未配置")
+	if c.MaxAge < MinRetentionDays {
+		return fmt.Errorf("log.max_age 不得少于 %d 天（《网络安全法》要求网络日志留存不少于六个月）", MinRetentionDays)
 	}
 	if c.MaxBackups <= 0 {
 		return fmt.Errorf("log.max_backups 未配置")

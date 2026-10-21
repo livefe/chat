@@ -4,7 +4,6 @@ export interface ConversationItem {
   peerId: number
   peerNickname: string
   peerAvatar: string
-  peerMobile: string
   lastContent: string
   lastActiveAt: number
   unreadCount: number

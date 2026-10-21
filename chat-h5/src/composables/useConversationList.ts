@@ -56,7 +56,6 @@ export function useConversationList(opts: {
       peerNickname:
         sanitizeNickname(preview.peerNickname) || sanitizeNickname(existing?.peerNickname) || '',
       peerAvatar: preview.peerAvatar || existing?.peerAvatar || '',
-      peerMobile: existing?.peerMobile || preview.peerMobile || '',
       lastContent: preview.lastContent || existing?.lastContent || '',
       lastActiveAt,
       unreadCount: existing?.unreadCount ?? 0,

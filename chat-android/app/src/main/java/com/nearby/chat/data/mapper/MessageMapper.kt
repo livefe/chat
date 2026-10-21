@@ -30,8 +30,6 @@ fun MessageItemDto.toDomain(): MessageItem = MessageItem(
     replyToFromName = replyToFromName,
     replyToContentType = replyToContentType,
     replyToContent = replyToContent,
-    latitude = latitude,
-    longitude = longitude,
     createdAt = createdAt,
     recalled = recalled,
 )
@@ -40,7 +38,6 @@ fun ConversationItemDto.toDomain(): ConversationItem = ConversationItem(
     peerId = peerId,
     peerNickname = peerNickname,
     peerAvatar = peerAvatar,
-    peerMobile = peerMobile,
     lastContent = lastContent,
     lastActiveAt = lastActiveAt,
     unreadCount = unreadCount,

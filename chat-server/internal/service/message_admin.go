@@ -211,6 +211,8 @@ func toAdminMessageItem(m *model.Message, profiles map[uint]types.UserProfile, r
 	p, ok := profiles[m.FromUserID]
 	item := types.AdminMessageItem{
 		MessageItem: messageItem(m, p, ok),
+		Latitude:    m.Latitude,
+		Longitude:   m.Longitude,
 		ScopeText:   utils.TextOf(messageScopeText, m.Scope),
 		RoomName:    roomNames[m.RoomID],
 	}

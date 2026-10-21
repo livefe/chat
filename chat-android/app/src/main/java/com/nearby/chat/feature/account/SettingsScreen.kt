@@ -40,6 +40,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenBlocks: () -> Unit,
     onOpenDeactivate: () -> Unit,
+    onOpenUserAgreement: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
     onCheckUpdate: () -> Unit,
     checkingUpdate: Boolean = false,
 ) {
@@ -68,6 +70,19 @@ fun SettingsScreen(
                 SettingsCell(stringResource(R.string.block_list_title), onClick = onOpenBlocks)
                 HorizontalDivider(color = AppColors.Divider, modifier = Modifier.padding(start = AppSpacing.L))
                 SettingsCell(stringResource(R.string.deactivate_title), onClick = onOpenDeactivate)
+            }
+
+            Spacer(Modifier.height(AppSpacing.M))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(AppShapes.Card)
+                    .background(AppColors.CardBg),
+            ) {
+                SettingsCell(stringResource(R.string.h5_user_agreement), onClick = onOpenUserAgreement)
+                HorizontalDivider(color = AppColors.Divider, modifier = Modifier.padding(start = AppSpacing.L))
+                SettingsCell(stringResource(R.string.h5_privacy_policy), onClick = onOpenPrivacyPolicy)
             }
 
             Spacer(Modifier.height(AppSpacing.M))

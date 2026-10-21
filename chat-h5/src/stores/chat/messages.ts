@@ -152,8 +152,6 @@ export function createOptimisticHelpers(deps: OptimisticMessageDeps) {
       replyToFromName: reply?.replyToFromName,
       replyToContentType: reply?.replyToContentType,
       replyToContent: reply?.replyToContent,
-      latitude: 0,
-      longitude: 0,
       createdAt: Math.floor(Date.now() / 1000),
       clientMsgId,
       sendStatus: 'sending',

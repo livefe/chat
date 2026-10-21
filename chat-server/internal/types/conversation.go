@@ -4,7 +4,6 @@ type ConversationItem struct {
 	PeerID       uint   `json:"peerId"`
 	PeerNickname string `json:"peerNickname"`
 	PeerAvatar   string `json:"peerAvatar"`
-	PeerMobile   string `json:"peerMobile"`
 	LastContent  string `json:"lastContent"`
 	LastActiveAt int64  `json:"lastActiveAt"`
 	UnreadCount  int64  `json:"unreadCount"`

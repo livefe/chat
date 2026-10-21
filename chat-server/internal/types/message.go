@@ -27,24 +27,22 @@ type NearbyMessageQuery struct {
 }
 
 type MessageItem struct {
-	ID                 uint    `json:"id"`
-	Scope              uint8   `json:"scope"`
-	RoomID             uint    `json:"roomId"`
-	PostID             uint    `json:"postId"`
-	FromUserID         uint    `json:"fromUserId"`
-	ToUserID           uint    `json:"toUserId"`
-	FromName           string  `json:"fromName"`
-	FromAvatar         string  `json:"fromAvatar"`
-	ContentType        uint8   `json:"contentType"`
-	Content            string  `json:"content"`
-	ReplyToID          uint    `json:"replyToId,omitempty"`
-	ReplyToFromName    string  `json:"replyToFromName,omitempty"`
-	ReplyToContentType uint8   `json:"replyToContentType,omitempty"`
-	ReplyToContent     string  `json:"replyToContent,omitempty"`
-	Latitude           float64 `json:"latitude"`
-	Longitude          float64 `json:"longitude"`
-	CreatedAt          int64   `json:"createdAt"`
-	Recalled           bool    `json:"recalled"`
+	ID                 uint   `json:"id"`
+	Scope              uint8  `json:"scope"`
+	RoomID             uint   `json:"roomId"`
+	PostID             uint   `json:"postId"`
+	FromUserID         uint   `json:"fromUserId"`
+	ToUserID           uint   `json:"toUserId"`
+	FromName           string `json:"fromName"`
+	FromAvatar         string `json:"fromAvatar"`
+	ContentType        uint8  `json:"contentType"`
+	Content            string `json:"content"`
+	ReplyToID          uint   `json:"replyToId,omitempty"`
+	ReplyToFromName    string `json:"replyToFromName,omitempty"`
+	ReplyToContentType uint8  `json:"replyToContentType,omitempty"`
+	ReplyToContent     string `json:"replyToContent,omitempty"`
+	CreatedAt          int64  `json:"createdAt"`
+	Recalled           bool   `json:"recalled"`
 }
 
 type MessageListResponse struct {
@@ -77,13 +75,15 @@ type AdminMessageListRequest struct {
 
 type AdminMessageItem struct {
 	MessageItem
-	ScopeText       string `json:"scopeText"`
-	RoomName        string `json:"roomName"`
-	ToName          string `json:"toName"`
-	Deleted         bool   `json:"deleted"`
-	DeletedAt       string `json:"deletedAt"`
-	ReplyToRecalled bool   `json:"replyToRecalled"`
-	ReplyToDeleted  bool   `json:"replyToDeleted"`
+	Latitude        float64 `json:"latitude"`
+	Longitude       float64 `json:"longitude"`
+	ScopeText       string  `json:"scopeText"`
+	RoomName        string  `json:"roomName"`
+	ToName          string  `json:"toName"`
+	Deleted         bool    `json:"deleted"`
+	DeletedAt       string  `json:"deletedAt"`
+	ReplyToRecalled bool    `json:"replyToRecalled"`
+	ReplyToDeleted  bool    `json:"replyToDeleted"`
 }
 
 type AdminMessageListResponse struct {

@@ -120,8 +120,6 @@ fun newOptimisticMessage(
     roomId: Long = 0,
     postId: Long = 0,
     toUserId: Long = 0,
-    lat: Double = 0.0,
-    lng: Double = 0.0,
     replyTo: MessageItem? = null,
     replyToContent: String = "",
 ): Pair<String, MessageItem> {
@@ -142,8 +140,6 @@ fun newOptimisticMessage(
         replyToFromName = quote?.fromName.orEmpty(),
         replyToContentType = quote?.contentType ?: 0,
         replyToContent = if (quote != null) replyToContent else "",
-        latitude = lat,
-        longitude = lng,
         createdAt = System.currentTimeMillis() / 1000,
         clientMsgId = clientMsgId,
         sendStatus = SendStatus.SENDING,

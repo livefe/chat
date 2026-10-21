@@ -86,17 +86,14 @@ func (s *ConversationService) List(ctx context.Context, userID uint, page, pageS
 		peer, ok := profiles[peerID]
 		peerNickname := deactivatedDisplayName()
 		peerAvatar := ""
-		peerMobile := ""
 		if ok {
 			peerNickname = utils.DisplayName(peer.Nickname)
 			peerAvatar = peer.AvatarURL
-			peerMobile = utils.DesensitizeMobile(peer.Mobile)
 		}
 		items = append(items, types.ConversationItem{
 			PeerID:       peerID,
 			PeerNickname: peerNickname,
 			PeerAvatar:   peerAvatar,
-			PeerMobile:   peerMobile,
 			LastContent:  conv.LastContent,
 			LastActiveAt: conv.LastActiveAt,
 			UnreadCount:  unread[peerID],

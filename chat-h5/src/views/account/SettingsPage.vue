@@ -12,6 +12,10 @@ const router = useRouter()
       <van-cell title="黑名单" is-link @click="router.push('/me/settings/blocks')" />
       <van-cell title="注销账号" is-link @click="router.push('/me/account/deactivate')" />
     </van-cell-group>
+    <van-cell-group inset class="settings-section">
+      <van-cell title="用户协议" is-link @click="router.push('/agreement/user')" />
+      <van-cell title="隐私政策" is-link @click="router.push('/agreement/privacy')" />
+    </van-cell-group>
   </SubPageLayout>
 </template>
 

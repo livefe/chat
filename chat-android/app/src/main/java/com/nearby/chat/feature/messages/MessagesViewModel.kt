@@ -14,6 +14,7 @@ import com.nearby.chat.core.paging.OffsetPageTracker
 import com.nearby.chat.core.ui.TextResolver
 import com.nearby.chat.core.ui.Toaster
 import com.nearby.chat.core.ui.UiText
+import com.nearby.chat.data.local.NotificationPromptStore
 import com.nearby.chat.data.repo.ChatRepository
 import com.nearby.chat.data.repo.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,9 +33,13 @@ class MessagesViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val toaster: Toaster,
     private val textResolver: TextResolver,
+    private val notificationPromptStore: NotificationPromptStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MessagesUiState())
     private val pager = OffsetPageTracker(ChatLimits.CONVERSATION_PAGE)
+
+    private val _notificationPrompt = MutableStateFlow(false)
+    val notificationPrompt: StateFlow<Boolean> = _notificationPrompt
 
     val uiState: StateFlow<MessagesUiState> = combine(
         _uiState,
@@ -73,6 +78,17 @@ class MessagesViewModel @Inject constructor(
                 .onFailure { e -> toaster.fail(e, R.string.common_load_failed) }
             _uiState.update { it.copy(loading = false) }
         }
+    }
+
+    fun checkNotificationPrompt() {
+        viewModelScope.launch {
+            if (!notificationPromptStore.prompted()) _notificationPrompt.value = true
+        }
+    }
+
+    fun onNotificationPromptHandled() {
+        _notificationPrompt.value = false
+        viewModelScope.launch { notificationPromptStore.markPrompted() }
     }
 
     fun loadMore() {
@@ -164,7 +180,6 @@ class MessagesViewModel @Inject constructor(
                 peerId = peerId,
                 peerNickname = peerName.ifBlank { sanitizeNickname(existing?.peerNickname) },
                 peerAvatar = peerAvatar.ifBlank { existing?.peerAvatar.orEmpty() },
-                peerMobile = existing?.peerMobile.orEmpty(),
                 lastContent = content,
                 lastActiveAt = activeAt.takeIf { it > 0 } ?: (existing?.lastActiveAt ?: 0L),
                 unreadCount = existing?.unreadCount ?: 0,

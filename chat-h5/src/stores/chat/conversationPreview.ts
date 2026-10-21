@@ -22,7 +22,6 @@ export function createConversationPreviewHelpers(deps: {
         peerNickname:
           sanitizeNickname(opts.peerNickname) || sanitizeNickname(existing?.peerNickname) || '',
         peerAvatar: opts.peerAvatar || existing?.peerAvatar || '',
-        peerMobile: existing?.peerMobile || '',
         lastContent: opts.lastContent,
         lastActiveAt: opts.lastActiveAt || existing?.lastActiveAt || 0,
         unreadCount: existing?.unreadCount ?? 0,

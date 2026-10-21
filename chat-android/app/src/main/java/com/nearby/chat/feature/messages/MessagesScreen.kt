@@ -1,5 +1,10 @@
 package com.nearby.chat.feature.messages
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -27,7 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -60,8 +67,28 @@ fun MessagesScreen(
     var actionTarget by remember { mutableStateOf<ConversationItem?>(null) }
     var actionAnchor by remember { mutableStateOf(Rect.Zero) }
     var deleteTarget by remember { mutableStateOf<ConversationItem?>(null) }
+    val notificationPrompt by viewModel.notificationPrompt.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { }
 
     LaunchedEffect(Unit) { viewModel.load() }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) viewModel.checkNotificationPrompt()
+    }
+
+    LaunchedEffect(notificationPrompt) {
+        if (!notificationPrompt || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        viewModel.onNotificationPromptHandled()
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -191,4 +218,5 @@ fun MessagesScreen(
             },
         )
     }
+
 }

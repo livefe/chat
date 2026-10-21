@@ -1,5 +1,10 @@
 package com.nearby.chat.feature.forward
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -27,9 +32,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nearby.chat.R
@@ -40,6 +47,7 @@ import com.nearby.chat.core.theme.AppSpacing
 import com.nearby.chat.core.theme.AppType
 import com.nearby.chat.core.ui.AppBackIconButton
 import com.nearby.chat.core.ui.AppTopBarTitle
+import com.nearby.chat.core.ui.LocalToaster
 import com.nearby.chat.core.ui.appTopAppBarColors
 import com.nearby.chat.core.ui.asString
 
@@ -54,6 +62,24 @@ fun ForwardScreen(
     val session = viewModel.session
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val latestOnBack by rememberUpdatedState(onBack)
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val storagePermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) viewModel.saveShareImage() else toaster.fail(R.string.share_save_need_storage)
+    }
+
+    fun saveImage() {
+        val needsStorage = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsStorage) {
+            storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            viewModel.saveShareImage()
+        }
+    }
 
     LaunchedEffect(viewModel) {
         if (session == null) {
@@ -149,7 +175,7 @@ fun ForwardScreen(
             if (session.showExternalShare && session.postId > 0L) {
                 ForwardExternalShareBar(
                     sharing = state.sharing,
-                    onSaveImage = viewModel::saveShareImage,
+                    onSaveImage = ::saveImage,
                     onCopyLink = viewModel::copyLink,
                     onShare = viewModel::shareExternal,
                 )

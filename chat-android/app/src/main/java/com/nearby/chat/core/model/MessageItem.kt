@@ -15,8 +15,6 @@ data class MessageItem(
     val replyToFromName: String = "",
     val replyToContentType: Int = 0,
     val replyToContent: String = "",
-    val latitude: Double = 0.0,
-    val longitude: Double = 0.0,
     val createdAt: Long = 0,
     val recalled: Boolean = false,
     val clientMsgId: String = "",

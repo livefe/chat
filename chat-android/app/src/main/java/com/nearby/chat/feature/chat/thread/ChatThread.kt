@@ -216,8 +216,6 @@ class ChatThread internal constructor(
                 roomId = target.roomId,
                 postId = target.postId,
                 toUserId = target.toUserId,
-                lat = target.lat ?: 0.0,
-                lng = target.lng ?: 0.0,
                 replyTo = reply,
                 replyToContent = reply?.let { textResolver.resolve(replyQuoteText(it.contentType, it.content)) }.orEmpty(),
             )
