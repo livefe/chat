@@ -21,3 +21,8 @@ export const AD_LANDING_OPTIONS = [
   { value: 'post', label: '帖子' },
   { value: 'room', label: '聊天区' },
 ]
+
+export function formatAdCtr(ctr?: number) {
+  if (ctr == null || Number.isNaN(ctr)) return '0%'
+  return `${(ctr * 100).toFixed(2)}%`
+}

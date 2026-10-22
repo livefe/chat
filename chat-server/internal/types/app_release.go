@@ -26,10 +26,12 @@ type AppReleaseItem struct {
 }
 
 type AppReleaseListResponse struct {
-	List []*AppReleaseItem `json:"list"`
+	Total int64             `json:"total"`
+	List  []*AppReleaseItem `json:"list"`
 }
 
 type AppReleaseAdminListRequest struct {
+	PageQuery
 	Platform string `form:"platform" binding:"omitempty,oneof=android ios h5"`
 }
 

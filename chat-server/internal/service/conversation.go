@@ -242,10 +242,17 @@ func (s *ConversationService) clearUnread(ctx context.Context, userID, peerID ui
 }
 
 func (s *ConversationService) AdminList(ctx context.Context, req *types.AdminConversationListRequest) (*types.AdminConversationListResponse, error) {
-	list, total, err := s.convRepo.List(ctx, repository.ConversationListFilter{
-		UserID: req.UserID,
-		Page:   req.Page, PageSize: req.PageSize,
-	})
+	filter := repository.ConversationListFilter{
+		UserID: req.UserID, PeerUserID: req.PeerUserID,
+		Page: req.Page, PageSize: req.PageSize,
+	}
+	if t, err := time.ParseInLocation(time.DateTime, req.StartTime, time.Local); err == nil {
+		filter.ActiveAfter = t.Unix()
+	}
+	if t, err := time.ParseInLocation(time.DateTime, req.EndTime, time.Local); err == nil {
+		filter.ActiveBefore = t.Unix()
+	}
+	list, total, err := s.convRepo.List(ctx, filter)
 	if err != nil {
 		s.log.Error(ctx, "查询会话列表失败", logger.Error(err))
 		return nil, fmt.Errorf("查询会话列表失败: %w", err)

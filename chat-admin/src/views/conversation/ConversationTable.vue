@@ -1,16 +1,25 @@
 <template>
-  <el-table :data="list" v-loading="loading" empty-text="暂无会话">
+  <el-table :data="list" v-loading="loading">
+    <template #empty>
+      <TableEmpty :error="error" text="暂无会话" @retry="emit('page-change')" />
+    </template>
     <el-table-column prop="id" label="ID" width="70" />
-    <el-table-column label="用户A" min-width="150">
+    <el-table-column label="用户A" min-width="160">
       <template #default="{ row }">
-        <div>{{ row.userMinName }}</div>
-        <div class="sub">{{ row.userMinMobile }} · ID {{ row.userMinId }}</div>
+        <UserCell
+          :user-id="row.userMinId"
+          :nickname="row.userMinName"
+          :mobile="row.userMinMobile"
+        />
       </template>
     </el-table-column>
-    <el-table-column label="用户B" min-width="150">
+    <el-table-column label="用户B" min-width="160">
       <template #default="{ row }">
-        <div>{{ row.userMaxName }}</div>
-        <div class="sub">{{ row.userMaxMobile }} · ID {{ row.userMaxId }}</div>
+        <UserCell
+          :user-id="row.userMaxId"
+          :nickname="row.userMaxName"
+          :mobile="row.userMaxMobile"
+        />
       </template>
     </el-table-column>
     <el-table-column prop="lastContent" label="最后消息" min-width="180" show-overflow-tooltip />
@@ -21,7 +30,7 @@
       <template #default="{ row }">
         <div class="action-cell">
           <el-button
-            v-if="canViewMessage"
+            v-if="can(PERM.ChatMessage)"
             size="small"
             link
             type="primary"
@@ -30,9 +39,9 @@
             消息
           </el-button>
           <el-dropdown
-            v-if="hasMoreActions"
+            v-if="can(PERM.UserAccountMute)"
             trigger="click"
-            @command="(cmd: string) => emit('command', row as AdminConversationItem, cmd)"
+            @command="(cmd: 'min' | 'max') => emit('mute', row as AdminConversationItem, cmd)"
           >
             <el-button size="small" link type="primary">
               更多
@@ -40,38 +49,8 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <template v-if="canViewUserDetail">
-                  <el-dropdown-item command="detail:min">
-                    {{ row.userMinName || row.userMinMobile }} 详情
-                  </el-dropdown-item>
-                  <el-dropdown-item command="detail:max">
-                    {{ row.userMaxName || row.userMaxMobile }} 详情
-                  </el-dropdown-item>
-                </template>
-                <template v-if="canMuteUser">
-                  <el-dropdown-item
-                    v-if="canViewUserDetail"
-                    divided
-                    disabled
-                    class="dropdown-label"
-                  >
-                    禁言用户A
-                  </el-dropdown-item>
-                  <el-dropdown-item v-else disabled class="dropdown-label"
-                    >禁言用户A</el-dropdown-item
-                  >
-                  <el-dropdown-item command="mute:min:1">1 小时</el-dropdown-item>
-                  <el-dropdown-item command="mute:min:24">24 小时</el-dropdown-item>
-                  <el-dropdown-item command="mute:min:168">7 天</el-dropdown-item>
-                  <el-dropdown-item command="mute:min:-1">永久</el-dropdown-item>
-                  <el-dropdown-item divided disabled class="dropdown-label"
-                    >禁言用户B</el-dropdown-item
-                  >
-                  <el-dropdown-item command="mute:max:1">1 小时</el-dropdown-item>
-                  <el-dropdown-item command="mute:max:24">24 小时</el-dropdown-item>
-                  <el-dropdown-item command="mute:max:168">7 天</el-dropdown-item>
-                  <el-dropdown-item command="mute:max:-1">永久</el-dropdown-item>
-                </template>
+                <el-dropdown-item command="min">禁言 {{ row.userMinName }}</el-dropdown-item>
+                <el-dropdown-item command="max">禁言 {{ row.userMaxName }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -94,8 +73,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ArrowDown } from '@element-plus/icons-vue'
+
 import type { AdminConversationItem } from '@/api/conversation'
+import TableEmpty from '@/components/common/TableEmpty.vue'
+import UserCell from '@/components/common/UserCell.vue'
 import { usePermission } from '@/composables/usePermission'
 import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
 import { PERM } from '@/constants/permission'
@@ -104,6 +86,7 @@ import { formatUnixSecondsLocale } from '@/utils/datetime'
 defineProps<{
   list: AdminConversationItem[]
   loading: boolean
+  error?: boolean
   total: number
 }>()
 
@@ -112,25 +95,16 @@ const pageSize = defineModel<number>('pageSize', { required: true })
 
 const emit = defineEmits<{
   messages: [row: AdminConversationItem]
-  command: [row: AdminConversationItem, command: string]
+  mute: [row: AdminConversationItem, side: 'min' | 'max']
   'page-change': []
 }>()
 
 const { can } = usePermission()
-const canViewMessage = computed(() => can(PERM.ChatMessage))
-const canViewUserDetail = computed(() => can(PERM.UserAccountDetail))
-const canMuteUser = computed(() => can(PERM.UserAccountMute))
-const hasMoreActions = computed(() => canViewUserDetail.value || canMuteUser.value)
 </script>
 
 <style scoped>
 .action-icon {
   margin-left: 2px;
   font-size: 12px;
-}
-:deep(.dropdown-label) {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  cursor: default;
 }
 </style>

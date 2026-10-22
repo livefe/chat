@@ -59,6 +59,7 @@ func (s *PostService) ListPublic(ctx context.Context, viewerID uint, req *types.
 
 	if req.RoomID != nil && *req.RoomID > 0 {
 		filter.RoomID = req.RoomID
+		filter.PinnedFirst = true
 	}
 	if viewerID > 0 && s.userSvc != nil {
 		if ids, err := s.userSvc.ListBlockedEitherPeerIDs(ctx, viewerID); err == nil {
@@ -88,11 +89,22 @@ func (s *PostService) ListPublic(ctx context.Context, viewerID uint, req *types.
 }
 
 func (s *PostService) ListMine(ctx context.Context, userID uint, req *types.MyPostListRequest) (*types.PostListResponse, error) {
-	return s.listPosts(ctx, repository.PostListFilter{
+	list, total, err := s.postRepo.List(ctx, repository.PostListFilter{
 		UserID:   &userID,
 		Page:     req.Page,
 		PageSize: req.PageSize,
-	}, req.Latitude, req.Longitude)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	resp, err := s.postListResponse(ctx, list, total, req.Latitude, req.Longitude)
+	if err != nil {
+		return nil, err
+	}
+	for i, p := range list {
+		resp.List[i].AuditRemark = ownerAuditRemark(p)
+	}
+	return resp, nil
 }
 
 func (s *PostService) ListJoined(ctx context.Context, userID uint, req *types.MyPostListRequest) (*types.PostListResponse, error) {
@@ -217,6 +229,9 @@ func (s *PostService) Get(ctx context.Context, userID uint, id uint) (*types.Pos
 		return nil, errs.NotFound("动态不存在")
 	}
 	d := &types.PostDetail{PostItem: s.toPostItem(p, s.postImageURLs(ctx, p))}
+	if userID > 0 && p.UserID == userID {
+		d.AuditRemark = ownerAuditRemark(p)
+	}
 	if p.UserID > 0 {
 		publisher, err := s.loadPublisher(ctx, p.UserID)
 		if err != nil {

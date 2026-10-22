@@ -7,6 +7,22 @@
     :close-on-click-modal="false"
     @closed="onFormClosed"
   >
+    <el-alert
+      v-if="form.rejectRemark"
+      type="error"
+      :closable="false"
+      show-icon
+      :title="`上次驳回原因：${form.rejectRemark}`"
+      class="form-alert"
+    />
+    <el-alert
+      v-if="form.status === AD_STATUS.Paused"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="该计划已暂停，保存修改后需重新审核才能投放；如内容无需修改，请直接在列表中「恢复投放」"
+      class="form-alert"
+    />
     <div class="dialog-body" :class="{ 'dialog-body--map': form.hasGeo }">
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="110px" class="form-main">
         <el-form-item label="广告主" prop="advertiserName">
@@ -18,19 +34,37 @@
         <el-form-item label="副标题" prop="subtitle">
           <el-input v-model="form.subtitle" maxlength="120" show-word-limit />
         </el-form-item>
+        <el-form-item label="内部名称" prop="name">
+          <el-input
+            v-model="form.name"
+            maxlength="100"
+            show-word-limit
+            placeholder="仅后台可见，留空则与标题相同"
+          />
+        </el-form-item>
         <el-form-item label="封面图" prop="imageMediaId">
           <div class="upload-row">
-            <el-upload
-              :show-file-list="false"
-              accept="image/*"
-              :http-request="handleImageUpload"
-              :disabled="uploading || !canUpload"
-            >
-              <el-button :loading="uploading" :disabled="!canUpload">上传图片</el-button>
-            </el-upload>
-            <span v-if="form.imageMediaId" class="upload-hint"
-              >mediaId: {{ form.imageMediaId }}</span
-            >
+            <el-image
+              v-if="form.imageUrl"
+              :src="form.imageUrl"
+              :preview-src-list="[form.imageUrl]"
+              fit="cover"
+              class="cover-thumb"
+              preview-teleported
+            />
+            <div>
+              <el-upload
+                :show-file-list="false"
+                accept="image/jpeg,image/png,image/webp"
+                :http-request="handleImageUpload"
+                :disabled="uploading || !canUpload"
+              >
+                <el-button :loading="uploading" :disabled="!canUpload">
+                  {{ form.imageUrl ? '更换图片' : '上传图片' }}
+                </el-button>
+              </el-upload>
+              <div class="field-hint">建议 16:9（如 1280×720），JPG / PNG / WebP</div>
+            </div>
           </div>
         </el-form-item>
         <el-form-item label="落地类型" prop="landingType">
@@ -52,7 +86,9 @@
             type="datetime"
             placeholder="开始时间"
             value-format="X"
+            :disabled-date="isPastDay"
             style="width: 100%"
+            @change="formRef?.validateField('endAt')"
           />
         </el-form-item>
         <el-form-item label="结束时间" prop="endAt">
@@ -61,6 +97,7 @@
             type="datetime"
             placeholder="结束时间"
             value-format="X"
+            :disabled-date="isPastDay"
             style="width: 100%"
           />
         </el-form-item>
@@ -85,7 +122,7 @@
         </el-form-item>
         <el-form-item label="日曝光上限">
           <el-input-number v-model="form.dailyImpressionLimit" :min="0" :step="100" />
-          <span class="field-hint">0 表示不限</span>
+          <span class="field-hint field-hint--inline">0 表示不限</span>
         </el-form-item>
         <el-form-item label="提交审核">
           <el-checkbox v-model="form.submitAudit">保存后进入待审核</el-checkbox>
@@ -95,6 +132,7 @@
       <AdCampaignPreview
         :image-url="form.imageUrl"
         :title="form.title"
+        :subtitle="form.subtitle"
         :advertiser-name="form.advertiserName"
       />
     </div>
@@ -109,17 +147,11 @@
 import { computed, nextTick, reactive, ref } from 'vue'
 import type { FormInstance, FormRules, UploadRequestOptions } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import {
-  getAdCampaignDetail,
-  createAdCampaign,
-  updateAdCampaign,
-  uploadAdImage,
-  type AdCampaignItem,
-} from '@/api/ad'
+import { getAdCampaignDetail, saveAdCampaign, uploadAdImage } from '@/api/ad'
 import AmapPicker from '@/components/amap/AmapPicker.vue'
 import { showApiError } from '@/utils/apiError'
 import { hasCoordinates } from '@/utils/geo'
-import { AD_LANDING_OPTIONS } from '@/constants/ad'
+import { AD_LANDING_OPTIONS, AD_STATUS } from '@/constants/ad'
 import { PERM } from '@/constants/permission'
 import { usePermission } from '@/composables/usePermission'
 import AdCampaignPreview from './AdCampaignPreview.vue'
@@ -134,57 +166,13 @@ const saving = ref(false)
 const uploading = ref(false)
 const formRef = ref<FormInstance>()
 
-const form = reactive({
-  id: 0,
-  advertiserName: '',
-  title: '',
-  subtitle: '',
-  imageMediaId: 0,
-  imageUrl: '',
-  landingType: 'url',
-  landingValue: '',
-  priority: 100,
-  startAt: '' as string | number,
-  endAt: '' as string | number,
-  cpdPrice: 0,
-  hasGeo: false,
-  latitude: 0,
-  longitude: 0,
-  radiusM: 3000,
-  dailyImpressionLimit: 0,
-  submitAudit: false,
-})
-
-const landingPlaceholder = computed(() => {
-  switch (form.landingType) {
-    case 'post':
-      return '帖子 ID'
-    case 'room':
-      return '聊天区 ID'
-    default:
-      return 'https://...'
-  }
-})
-
-const formRules: FormRules = {
-  advertiserName: [{ required: true, message: '请输入广告主', trigger: 'blur' }],
-  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
-  imageMediaId: [
-    {
-      validator: (_r, v, cb) => (v ? cb() : cb(new Error('请上传封面图'))),
-      trigger: 'change',
-    },
-  ],
-  landingType: [{ required: true, message: '请选择落地类型', trigger: 'change' }],
-  landingValue: [{ required: true, message: '请输入落地值', trigger: 'blur' }],
-  startAt: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
-  endAt: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
-}
-
 function defaultForm() {
   const now = Math.floor(Date.now() / 1000)
   return {
     id: 0,
+    status: AD_STATUS.Draft as number,
+    rejectRemark: '',
+    name: '',
     advertiserName: '',
     title: '',
     subtitle: '',
@@ -205,6 +193,56 @@ function defaultForm() {
   }
 }
 
+const form = reactive(defaultForm())
+
+const landingPlaceholder = computed(() => {
+  switch (form.landingType) {
+    case 'post':
+      return '帖子 ID'
+    case 'room':
+      return '聊天区 ID'
+    default:
+      return 'https://...'
+  }
+})
+
+function toUnix(v: string | number) {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+function isPastDay(d: Date) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return d.getTime() < today.getTime()
+}
+
+const formRules: FormRules = {
+  advertiserName: [{ required: true, message: '请输入广告主', trigger: 'blur' }],
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  imageMediaId: [
+    {
+      validator: (_r, v, cb) => (v ? cb() : cb(new Error('请上传封面图'))),
+      trigger: 'change',
+    },
+  ],
+  landingType: [{ required: true, message: '请选择落地类型', trigger: 'change' }],
+  landingValue: [{ required: true, message: '请输入落地值', trigger: 'blur' }],
+  startAt: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
+  endAt: [
+    { required: true, message: '请选择结束时间', trigger: 'change' },
+    {
+      validator: (_r, v, cb) => {
+        const end = toUnix(v)
+        if (end <= Math.floor(Date.now() / 1000)) cb(new Error('结束时间不能早于当前时间'))
+        else if (end <= toUnix(form.startAt)) cb(new Error('结束时间必须晚于开始时间'))
+        else cb()
+      },
+      trigger: 'change',
+    },
+  ],
+}
+
 async function openForm(data: ReturnType<typeof defaultForm>) {
   Object.assign(form, data)
   formVisible.value = true
@@ -220,11 +258,14 @@ function openCreate() {
   void openForm(defaultForm())
 }
 
-async function openEdit(row: AdCampaignItem) {
+async function openEdit(id: number) {
   try {
-    const { data } = await getAdCampaignDetail(row.id)
+    const { data } = await getAdCampaignDetail(id)
     await openForm({
       id: data.id,
+      status: data.status,
+      rejectRemark: data.rejectRemark || '',
+      name: data.name === data.title ? '' : data.name || '',
       advertiserName: data.advertiserName || '',
       title: data.title || '',
       subtitle: data.subtitle || '',
@@ -265,11 +306,6 @@ async function handleImageUpload(options: UploadRequestOptions) {
   }
 }
 
-function toUnix(v: string | number) {
-  const n = typeof v === 'number' ? v : Number(v)
-  return Number.isFinite(n) ? n : 0
-}
-
 function onGeoMapChange(payload: {
   shapeType: 1 | 2
   centerLat?: number
@@ -284,7 +320,11 @@ function onGeoMapChange(payload: {
 
 async function handleSubmit() {
   if (!formRef.value) return
-  await formRef.value.validate()
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   if (form.hasGeo) {
     if (!hasCoordinates(form.latitude, form.longitude)) {
       ElMessage.warning('请在地图上点击选择投放圆心')
@@ -297,7 +337,9 @@ async function handleSubmit() {
   }
   saving.value = true
   try {
-    const payload = {
+    await saveAdCampaign({
+      id: form.id || undefined,
+      name: form.name.trim(),
       advertiserName: form.advertiserName.trim(),
       title: form.title.trim(),
       subtitle: form.subtitle.trim(),
@@ -314,10 +356,8 @@ async function handleSubmit() {
       radiusM: form.hasGeo ? form.radiusM : 0,
       dailyImpressionLimit: form.dailyImpressionLimit,
       submitAudit: form.submitAudit,
-    }
-    if (form.id) await updateAdCampaign({ id: form.id, ...payload })
-    else await createAdCampaign(payload)
-    ElMessage.success('保存成功')
+    })
+    ElMessage.success(form.submitAudit ? '已保存并提交审核' : '已保存为草稿')
     formVisible.value = false
     emit('success')
   } catch (e) {
@@ -331,6 +371,9 @@ defineExpose({ openCreate, openEdit })
 </script>
 
 <style scoped>
+.form-alert {
+  margin-bottom: 12px;
+}
 .dialog-body {
   display: grid;
   grid-template-columns: 1fr 220px;
@@ -349,10 +392,18 @@ defineExpose({ openCreate, openEdit })
   align-items: center;
   gap: 12px;
 }
-.upload-hint,
+.cover-thumb {
+  width: 128px;
+  height: 72px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
 .field-hint {
   font-size: 12px;
+  line-height: 1.6;
   color: var(--el-text-color-secondary);
+}
+.field-hint--inline {
   margin-left: 8px;
 }
 @media (max-width: 768px) {

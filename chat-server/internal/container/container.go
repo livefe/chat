@@ -21,6 +21,7 @@ func New() (*Container, error) {
 		return nil, err
 	}
 
+	in.addCloser(services.SensitiveWord.Close)
 	in.addCloser(services.Realtime.Close)
 	in.addCloser(services.IMRealtime.Close)
 

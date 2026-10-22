@@ -1,5 +1,5 @@
 <template>
-  <el-form :inline="true" class="search-form">
+  <el-form :inline="true" class="search-form" @submit.prevent>
     <el-form-item label="词语">
       <el-input
         v-model="word"
@@ -22,7 +22,7 @@
     <el-form-item label="状态">
       <el-select v-model="status" placeholder="全部" clearable style="width: 120px">
         <el-option
-          v-for="opt in STATUS_OPTIONS"
+          v-for="opt in SENSITIVE_STATUS_OPTIONS"
           :key="opt.value"
           :label="opt.label"
           :value="opt.value"
@@ -37,8 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { STATUS_OPTIONS } from '@/constants'
-import { SENSITIVE_CATEGORY_OPTIONS } from '@/constants/sensitiveWord'
+import { SENSITIVE_CATEGORY_OPTIONS, SENSITIVE_STATUS_OPTIONS } from '@/constants/sensitiveWord'
 
 const word = defineModel<string>('word', { required: true })
 const category = defineModel<string>('category', { required: true })

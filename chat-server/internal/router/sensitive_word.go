@@ -15,6 +15,8 @@ func registerSensitiveWordRoutes(engine *gin.Engine, h *container.Handlers) {
 		auth.POST("/update", sh.Update)
 		auth.POST("/update/status", sh.UpdateStatus)
 		auth.POST("/delete", sh.Delete)
+		auth.POST("/batch/delete", sh.BatchDelete)
+		auth.POST("/batch/status", sh.BatchUpdateStatus)
 		auth.POST("/import", sh.Import)
 	}
 }

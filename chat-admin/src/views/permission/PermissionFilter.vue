@@ -1,11 +1,11 @@
 <template>
-  <el-form :inline="true" class="search-form">
-    <el-form-item label="名称">
+  <el-form :inline="true" class="search-form" @submit.prevent>
+    <el-form-item label="关键词">
       <el-input
-        v-model="name"
-        placeholder="请输入名称"
+        v-model="keyword"
+        placeholder="名称或编码"
         clearable
-        style="width: 180px"
+        style="width: 200px"
         @keyup.enter="emit('search')"
       />
     </el-form-item>
@@ -40,7 +40,7 @@
 import { STATUS_OPTIONS } from '@/constants'
 import { permissionTypeOptions } from '@/utils/permission'
 
-const name = defineModel<string>('name', { required: true })
+const keyword = defineModel<string>('keyword', { required: true })
 const type = defineModel<number>('type')
 const status = defineModel<number>('status')
 const emit = defineEmits<{ search: []; reset: [] }>()

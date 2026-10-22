@@ -92,17 +92,30 @@ func (h *EmployeeHandler) UpdateStatus(c *gin.Context) {
 	response.Success(c, "更新成功", nil)
 }
 
-func (h *EmployeeHandler) GetRoles(c *gin.Context) {
-	var req types.IDRequest
+func (h *EmployeeHandler) RoleOptions(c *gin.Context) {
+	var req types.EmployeeRoleOptionsRequest
 	if !bindQuery(c, &req) {
 		return
 	}
-	roles, err := h.employeeSvc.AdminListRoles(c.Request.Context(), req.ID)
+	result, err := h.employeeSvc.AdminRoleOptions(c.Request.Context(), middleware.CurrentEmployeeID(c), req.EmployeeID)
 	if err != nil {
 		response.WriteError(c, err)
 		return
 	}
-	response.Success(c, "", roles)
+	response.Success(c, "", result)
+}
+
+func (h *EmployeeHandler) LoginRecords(c *gin.Context) {
+	var req types.EmployeeLoginRecordListRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.employeeSvc.AdminLoginRecords(c.Request.Context(), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
 }
 
 func (h *EmployeeHandler) AssignRoles(c *gin.Context) {

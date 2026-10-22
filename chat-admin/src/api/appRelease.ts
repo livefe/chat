@@ -4,7 +4,7 @@ import { request, uploadForm } from './http'
 
 export interface AppReleaseItem {
   id: number
-  platform: string
+  platform: AppPlatform
   platformText: string
   version: string
   downloadUrl: string
@@ -14,12 +14,8 @@ export interface AppReleaseItem {
   createdAt: string
 }
 
-export interface AppReleaseListResponse {
-  list: AppReleaseItem[]
-}
-
 export interface AppUpdatePolicyItem {
-  platform: string
+  platform: AppPlatform
   platformText: string
   minSupportedVersion: string
   latestVersion: string
@@ -29,24 +25,24 @@ export interface AppUpdatePolicyItem {
   updatedAt: string
 }
 
-export const getAppReleaseList = (platform?: string) =>
-  request.get<AppReleaseListResponse>(
-    '/api/admin/app/release/list',
-    platform ? { platform } : undefined,
-  )
+export const getAppReleaseList = (params: { page: number; pageSize: number; platform?: string }) =>
+  request.get<{ total: number; list: AppReleaseItem[] }>('/api/admin/app/release/list', params)
 
-export const uploadAppRelease = (payload: {
-  platform: Exclude<AppPlatform, 'h5'>
-  version: string
-  changelog?: string
-  file: File
-}) => {
+export const uploadAppRelease = (
+  payload: {
+    platform: Exclude<AppPlatform, 'h5'>
+    version: string
+    changelog?: string
+    file: File
+  },
+  onProgress?: (percent: number) => void,
+) => {
   const form = new FormData()
   form.append('platform', payload.platform)
   form.append('version', payload.version)
   form.append('changelog', payload.changelog || '')
   form.append('file', payload.file)
-  return uploadForm<AppReleaseItem>('/api/admin/app/release/upload', form, 180000)
+  return uploadForm<AppReleaseItem>('/api/admin/app/release/upload', form, 600000, onProgress)
 }
 
 export const publishAppReleaseMeta = (payload: {
@@ -61,6 +57,9 @@ export const enableAppRelease = (id: number) =>
 
 export const disableAppRelease = (id: number) =>
   request.post('/api/admin/app/release/unset-current', { id })
+
+export const deleteAppRelease = (id: number) =>
+  request.post('/api/admin/app/release/delete', { id })
 
 export const getAppUpdatePolicyList = () =>
   request.get<{ list: AppUpdatePolicyItem[] }>('/api/admin/app/release/policy/list')

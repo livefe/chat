@@ -61,6 +61,7 @@ type PrivateMessagesResponse struct {
 }
 
 type AdminMessageListRequest struct {
+	ID         uint   `form:"id"`
 	UserID     uint   `form:"userId"`
 	PeerUserID uint   `form:"peerUserId"`
 	RoomID     uint   `form:"roomId"`
@@ -79,7 +80,9 @@ type AdminMessageItem struct {
 	Longitude       float64 `json:"longitude"`
 	ScopeText       string  `json:"scopeText"`
 	RoomName        string  `json:"roomName"`
+	FromMobile      string  `json:"fromMobile"`
 	ToName          string  `json:"toName"`
+	ToMobile        string  `json:"toMobile"`
 	Deleted         bool    `json:"deleted"`
 	DeletedAt       string  `json:"deletedAt"`
 	ReplyToRecalled bool    `json:"replyToRecalled"`
@@ -95,7 +98,23 @@ type AdminMessageContextResponse struct {
 	List []AdminMessageItem `json:"list"`
 }
 
+// AdminMessageContextRequest BeforeID / AfterID 用于在已加载的上下文两端继续翻页。
 type AdminMessageContextRequest struct {
-	ID    uint `form:"id" binding:"required"`
-	Limit int  `form:"limit" binding:"required,min=1,max=100"`
+	ID       uint `form:"id" binding:"required"`
+	Limit    int  `form:"limit" binding:"required,min=1,max=100"`
+	BeforeID uint `form:"beforeId"`
+	AfterID  uint `form:"afterId"`
+}
+
+// AdminMessageDeleteRequest MuteDuration 为 0 表示不禁言发送者，-1 为永久，其余为小时数。
+type AdminMessageDeleteRequest struct {
+	IDs          []uint `json:"ids" binding:"required,min=1,max=100"`
+	Reason       string `json:"reason" binding:"required,max=200"`
+	MuteDuration int    `json:"muteDuration" binding:"min=-1,max=87600"`
+}
+
+type AdminMessageDeleteResult struct {
+	Deleted int `json:"deleted"`
+	Skipped int `json:"skipped"`
+	Muted   int `json:"muted"`
 }

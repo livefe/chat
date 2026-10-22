@@ -509,7 +509,7 @@ func (s *PostService) ListSignups(ctx context.Context, userID uint, req *types.A
 }
 
 func (s *PostService) AdminListSignups(ctx context.Context, req *types.AdminPostSignupListRequest) (*types.AdminPostSignupListResponse, error) {
-	p, err := s.postRepo.GetByID(ctx, req.PostID)
+	p, err := s.postRepo.GetByIDUnscoped(ctx, req.PostID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errs.NotFound("动态不存在")
@@ -519,7 +519,53 @@ func (s *PostService) AdminListSignups(ctx context.Context, req *types.AdminPost
 	return s.buildSignupList(ctx, p, req, true)
 }
 
-func (s *PostService) buildSignupList(ctx context.Context, p *model.Post, req *types.AdminPostSignupListRequest, includeMobile bool) (*types.AdminPostSignupListResponse, error) {
+func (s *PostService) AdminListUserSignups(ctx context.Context, req *types.AdminUserSignupListRequest) (*types.AdminUserSignupListResponse, error) {
+	list, total, err := s.signupRepo.ListByUser(ctx, req.UserID, req.Page, req.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	postIDs := make([]uint, 0, len(list))
+	for _, item := range list {
+		postIDs = append(postIDs, item.PostID)
+	}
+	posts, err := s.postRepo.GetByIDsUnscoped(ctx, uniqueNonZeroIDs(postIDs))
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	postMap := make(map[uint]*model.Post, len(posts))
+	for _, p := range posts {
+		postMap[p.ID] = p
+	}
+
+	items := make([]types.AdminUserSignupItem, 0, len(list))
+	for _, item := range list {
+		row := types.AdminUserSignupItem{
+			ID:               item.ID,
+			PostID:           item.PostID,
+			SignupStatus:     item.Status,
+			SignupStatusText: utils.TextOf(signupStatusText, item.Status),
+			CheckedIn:        item.CheckedInAt > 0,
+			CheckedInAt:      formatSignupUnix(item.CheckedInAt),
+			CancelledAt:      formatSignupUnix(item.CancelledAt),
+			CreatedAt:        utils.FormatDateTime(item.CreatedAt),
+		}
+		if p, ok := postMap[item.PostID]; ok {
+			row.PostTitle = p.Title
+			row.PostStatus = p.Status
+			row.PostStatusText = utils.TextOf(postStatusText, p.Status)
+			if p.DeletedAt.Valid {
+				row.PostStatusText = "已删除"
+			}
+		} else {
+			row.PostStatusText = "已删除"
+		}
+		items = append(items, row)
+	}
+	return &types.AdminUserSignupListResponse{Total: total, List: items}, nil
+}
+
+// buildSignupList 后台视角可按手机号检索并返回脱敏手机号；发布者视角只能按昵称检索、不返回手机号。
+func (s *PostService) buildSignupList(ctx context.Context, p *model.Post, req *types.AdminPostSignupListRequest, admin bool) (*types.AdminPostSignupListResponse, error) {
 	extras, _ := s.extrasRepo.GetByPostID(ctx, p.ID)
 	if extras == nil || !extras.NeedSignup {
 		return nil, errs.Invalid("该动态无需报名")
@@ -532,11 +578,16 @@ func (s *PostService) buildSignupList(ctx context.Context, p *model.Post, req *t
 	}
 
 	list, total, err := s.signupRepo.ListByPost(ctx, repository.SignupListFilter{
-		PostID:   req.PostID,
-		Status:   req.Status,
-		CheckIn:  checkIn,
-		Page:     req.Page,
-		PageSize: req.PageSize,
+		PostID:             req.PostID,
+		Status:             req.Status,
+		CheckIn:            checkIn,
+		UserID:             req.UserID,
+		Keyword:            strings.TrimSpace(req.Keyword),
+		KeywordMatchMobile: admin,
+		SortField:          req.SortField,
+		SortDesc:           req.SortOrder == "desc",
+		Page:               req.Page,
+		PageSize:           req.PageSize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
@@ -575,8 +626,8 @@ func (s *PostService) buildSignupList(ctx context.Context, p *model.Post, req *t
 		}
 		if user, ok := userMap[item.UserID]; ok {
 			row.UserNickname = utils.DisplayName(user.Nickname)
-			if includeMobile {
-				row.UserMobile = user.Mobile
+			if admin {
+				row.UserMobile = utils.DesensitizeMobile(user.Mobile)
 			}
 		} else {
 			row.UserNickname = deactivatedDisplayName()

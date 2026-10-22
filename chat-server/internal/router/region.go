@@ -20,6 +20,7 @@ func registerRegionRoutes(engine *gin.Engine, h *container.Handlers) {
 	{
 		admin.GET("/children", rh.Children)
 		admin.GET("/search", rh.Search)
+		admin.GET("/trail", rh.AdminTrail)
 		admin.GET("/detail", rh.AdminDetail)
 	}
 }

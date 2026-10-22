@@ -27,6 +27,7 @@ func registerRoomRoutes(engine *gin.Engine, h *container.Handlers) {
 		admin.POST("/create", room.AdminRoomCreate)
 		admin.POST("/update", room.AdminRoomUpdate)
 		admin.POST("/audit", room.AdminRoomAudit)
+		admin.POST("/batch/audit", room.AdminRoomBatchAudit)
 		admin.POST("/update/status", room.AdminRoomUpdateStatus)
 	}
 }

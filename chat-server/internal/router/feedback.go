@@ -21,5 +21,6 @@ func registerFeedbackRoutes(engine *gin.Engine, h *container.Handlers) {
 		admin.GET("/list", fh.AdminList)
 		admin.GET("/detail", fh.AdminDetail)
 		admin.POST("/update/status", fh.AdminUpdateStatus)
+		admin.POST("/batch/close", fh.AdminBatchClose)
 	}
 }

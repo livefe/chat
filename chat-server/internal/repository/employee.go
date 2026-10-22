@@ -8,10 +8,14 @@ import (
 )
 
 type EmployeeListFilter struct {
+	ID            *uint
+	Keyword       string
 	Mobile        string
 	Name          string
+	EmployeeNo    string
 	DepartmentID  *uint
 	DepartmentIDs []uint
+	RoleID        *uint
 	Status        *uint8
 	ExcludeID     uint
 	StartTime     string
@@ -76,11 +80,25 @@ func (r *employeeRepository) GetByMobile(ctx context.Context, mobile string) (*m
 
 func (r *employeeRepository) List(ctx context.Context, f EmployeeListFilter) ([]*model.Employee, int64, error) {
 	db := database.Conn(ctx, r.db).Model(&model.Employee{})
+	if f.ID != nil && *f.ID > 0 {
+		db = db.Where("id = ?", *f.ID)
+	}
+	if f.Keyword != "" {
+		kw := "%" + f.Keyword + "%"
+		db = db.Where("name LIKE ? OR mobile LIKE ? OR employee_no LIKE ?", kw, kw, kw)
+	}
 	if f.Mobile != "" {
 		db = db.Where("mobile LIKE ?", "%"+f.Mobile+"%")
 	}
 	if f.Name != "" {
 		db = db.Where("name LIKE ?", "%"+f.Name+"%")
+	}
+	if f.EmployeeNo != "" {
+		db = db.Where("employee_no LIKE ?", "%"+f.EmployeeNo+"%")
+	}
+	if f.RoleID != nil && *f.RoleID > 0 {
+		db = db.Where("id IN (?)", database.Conn(ctx, r.db).Model(&model.EmployeeRole{}).
+			Select("employee_id").Where("role_id = ?", *f.RoleID))
 	}
 	if len(f.DepartmentIDs) > 0 {
 		db = db.Where("department_id IN ?", f.DepartmentIDs)

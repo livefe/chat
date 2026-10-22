@@ -9,10 +9,12 @@
   >
     <template #toolbar>
       <el-select v-model="filterStatus" placeholder="状态" clearable style="width: 120px">
-        <el-option label="待审核" :value="0" />
-        <el-option label="正常" :value="1" />
-        <el-option label="驳回" :value="2" />
-        <el-option label="禁用" :value="3" />
+        <el-option
+          v-for="item in ROOM_STATUS_OPTIONS"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
       </el-select>
       <el-select v-model="filterPlaceType" placeholder="类型" clearable style="width: 130px">
         <el-option
@@ -71,7 +73,7 @@ import {
   wgsPolygonToGcjPath,
   type LngLatTuple,
 } from '@/utils/mapOverlay'
-import { ROOM_PLACE_TYPE_OPTIONS } from '@/constants/room'
+import { ROOM_PLACE_TYPE_OPTIONS, ROOM_STATUS_OPTIONS } from '@/constants/room'
 
 const visible = defineModel<boolean>('visible', { required: true })
 

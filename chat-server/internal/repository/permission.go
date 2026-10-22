@@ -8,26 +8,15 @@ import (
 	"app/pkg/database"
 )
 
-type PermissionListFilter struct {
-	Name     string
-	Code     string
-	Type     *uint8
-	Status   *uint8
-	Page     int
-	PageSize int
-}
-
 type PermissionRepository interface {
 	Create(ctx context.Context, p *model.Permission) error
 	Update(ctx context.Context, p *model.Permission) error
 	Delete(ctx context.Context, id uint) error
 	GetByID(ctx context.Context, id uint) (*model.Permission, error)
-	GetByCode(ctx context.Context, code string) (*model.Permission, error)
 	GetAssignableByCode(ctx context.Context, code string) (*model.Permission, error)
 	GetByIDs(ctx context.Context, ids []uint) ([]*model.Permission, error)
 	ListByParentID(ctx context.Context, parentID uint) ([]*model.Permission, error)
 	ListAll(ctx context.Context) ([]*model.Permission, error)
-	List(ctx context.Context, f PermissionListFilter) ([]*model.Permission, int64, error)
 	GetAPIByPathAndMethod(ctx context.Context, path, method string) (*model.Permission, error)
 	ListEnabledAPIs(ctx context.Context) ([]*model.Permission, error)
 }
@@ -60,18 +49,10 @@ func (r *permissionRepository) GetByID(ctx context.Context, id uint) (*model.Per
 	return &p, nil
 }
 
-func (r *permissionRepository) GetByCode(ctx context.Context, code string) (*model.Permission, error) {
-	var p model.Permission
-	if err := database.Conn(ctx, r.db).Where("code = ?", code).First(&p).Error; err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
-
 func (r *permissionRepository) GetAssignableByCode(ctx context.Context, code string) (*model.Permission, error) {
 	var p model.Permission
 	if err := database.Conn(ctx, r.db).
-		Where("code = ? AND type IN ?", code, []uint8{model.PermissionTypeMenu, model.PermissionTypeButton, model.PermissionTypeData}).
+		Where("code = ? AND type IN ?", code, []uint8{model.PermissionTypeMenu, model.PermissionTypeButton}).
 		First(&p).Error; err != nil {
 		return nil, err
 	}
@@ -103,37 +84,6 @@ func (r *permissionRepository) ListAll(ctx context.Context) ([]*model.Permission
 		return nil, err
 	}
 	return ps, nil
-}
-
-func (r *permissionRepository) List(ctx context.Context, f PermissionListFilter) ([]*model.Permission, int64, error) {
-	db := database.Conn(ctx, r.db).Model(&model.Permission{})
-
-	if f.Name != "" {
-		db = db.Where("name LIKE ?", "%"+f.Name+"%")
-	}
-	if f.Code != "" {
-		db = db.Where("code LIKE ?", "%"+f.Code+"%")
-	}
-	if f.Type != nil {
-		db = db.Where("type = ?", *f.Type)
-	}
-	if f.Status != nil {
-		db = db.Where("status = ?", *f.Status)
-	}
-
-	var total int64
-	if err := db.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	var ps []*model.Permission
-	if err := db.Order("sort ASC, created_at DESC").
-		Offset((f.Page - 1) * f.PageSize).
-		Limit(f.PageSize).
-		Find(&ps).Error; err != nil {
-		return nil, 0, err
-	}
-	return ps, total, nil
 }
 
 func (r *permissionRepository) GetAPIByPathAndMethod(ctx context.Context, path, method string) (*model.Permission, error) {

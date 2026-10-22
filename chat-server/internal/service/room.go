@@ -28,13 +28,15 @@ type roomMessageReader interface {
 }
 
 type RoomService struct {
-	log       *logger.Logger
-	cache     *cache.Cache
-	roomRepo  repository.RoomRepository
-	presence  *PresenceService
-	sensitive *SensitiveWordService
-	channels  roomChannelNotifier
-	messages  roomMessageReader
+	log          *logger.Logger
+	cache        *cache.Cache
+	roomRepo     repository.RoomRepository
+	employeeRepo repository.EmployeeRepository
+	userSvc      *UserService
+	presence     *PresenceService
+	sensitive    *SensitiveWordService
+	channels     roomChannelNotifier
+	messages     roomMessageReader
 }
 
 func (s *RoomService) SetMessageReader(r roomMessageReader) {
@@ -72,17 +74,21 @@ func NewRoomService(
 	log *logger.Logger,
 	c *cache.Cache,
 	roomRepo repository.RoomRepository,
+	employeeRepo repository.EmployeeRepository,
+	userSvc *UserService,
 	presence *PresenceService,
 	sensitive *SensitiveWordService,
 	channels roomChannelNotifier,
 ) *RoomService {
 	return &RoomService{
-		log:       log,
-		cache:     c,
-		roomRepo:  roomRepo,
-		presence:  presence,
-		sensitive: sensitive,
-		channels:  channels,
+		log:          log,
+		cache:        c,
+		roomRepo:     roomRepo,
+		employeeRepo: employeeRepo,
+		userSvc:      userSvc,
+		presence:     presence,
+		sensitive:    sensitive,
+		channels:     channels,
 	}
 }
 
@@ -169,7 +175,7 @@ func (s *RoomService) insertRoom(ctx context.Context, req *types.CreateRoomReque
 }
 
 func toRoomItem(r *model.Room) types.RoomItem {
-	return types.RoomItem{
+	item := types.RoomItem{
 		ID:              r.ID,
 		Name:            r.Name,
 		Description:     r.Description,
@@ -189,6 +195,10 @@ func toRoomItem(r *model.Room) types.RoomItem {
 		CreatedAt:       utils.FormatDateTime(r.CreatedAt),
 		UpdatedAt:       utils.FormatDateTime(r.UpdatedAt),
 	}
+	if r.Status == model.RoomStatusRejected {
+		item.AuditRemark = r.AuditRemark
+	}
+	return item
 }
 
 func (s *RoomService) Get(ctx context.Context, id uint) (*types.RoomDetail, error) {

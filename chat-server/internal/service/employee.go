@@ -27,6 +27,7 @@ type EmployeeService struct {
 	permSvc          *PermissionService
 	employeeRepo     repository.EmployeeRepository
 	employeeRoleRepo repository.EmployeeRoleRepository
+	loginRecordRepo  repository.EmployeeLoginRecordRepository
 	roleRepo         repository.RoleRepository
 	deptRepo         repository.DepartmentRepository
 }
@@ -37,6 +38,7 @@ func NewEmployeeService(
 	permSvc *PermissionService,
 	employeeRepo repository.EmployeeRepository,
 	employeeRoleRepo repository.EmployeeRoleRepository,
+	loginRecordRepo repository.EmployeeLoginRecordRepository,
 	roleRepo repository.RoleRepository,
 	deptRepo repository.DepartmentRepository,
 ) *EmployeeService {
@@ -46,13 +48,14 @@ func NewEmployeeService(
 		permSvc:          permSvc,
 		employeeRepo:     employeeRepo,
 		employeeRoleRepo: employeeRoleRepo,
+		loginRecordRepo:  loginRecordRepo,
 		roleRepo:         roleRepo,
 		deptRepo:         deptRepo,
 	}
 }
 
-func toEmployeeItem(e *model.Employee, roles []types.EmployeeRoleBrief, departmentName string) types.EmployeeItem {
-	return types.EmployeeItem{
+func toEmployeeItem(e *model.Employee, roles []types.EmployeeRoleBrief, departmentName string, lastLogin *model.EmployeeLoginRecord) types.EmployeeItem {
+	item := types.EmployeeItem{
 		ID:           e.ID,
 		Mobile:       e.Mobile,
 		Name:         e.Name,
@@ -67,6 +70,11 @@ func toEmployeeItem(e *model.Employee, roles []types.EmployeeRoleBrief, departme
 		CreatedAt:    utils.FormatDateTime(e.CreatedAt),
 		UpdatedAt:    utils.FormatDateTime(e.UpdatedAt),
 	}
+	if lastLogin != nil {
+		item.LastLoginAt = utils.FormatDateTime(lastLogin.CreatedAt)
+		item.LastLoginIP = lastLogin.IP
+	}
+	return item
 }
 
 func (s *EmployeeService) resolveDepartment(ctx context.Context, departmentID uint) (uint, string, error) {

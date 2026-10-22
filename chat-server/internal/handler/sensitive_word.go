@@ -80,6 +80,30 @@ func (h *SensitiveWordHandler) Delete(c *gin.Context) {
 	response.Success(c, "删除成功", nil)
 }
 
+func (h *SensitiveWordHandler) BatchDelete(c *gin.Context) {
+	var req types.BatchSensitiveWordRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := h.svc.AdminBatchDelete(c.Request.Context(), req.IDs); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "删除成功", nil)
+}
+
+func (h *SensitiveWordHandler) BatchUpdateStatus(c *gin.Context) {
+	var req types.BatchSensitiveWordStatusRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := h.svc.AdminBatchUpdateStatus(c.Request.Context(), &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "更新成功", nil)
+}
+
 func (h *SensitiveWordHandler) Import(c *gin.Context) {
 	var req types.ImportSensitiveWordsRequest
 	if !bindJSON(c, &req) {

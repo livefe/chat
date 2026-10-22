@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"app/internal/model"
+	"app/internal/repository"
 	"app/internal/types"
 	"app/pkg/errs"
 	"app/pkg/logger"
@@ -47,28 +48,7 @@ func (s *MessageService) ListNearby(ctx context.Context, lat, lng float64, radiu
 	if lat == 0 && lng == 0 {
 		return nil, errs.Invalid("缺少定位信息")
 	}
-
-	const metersPerDeg = 111320.0
-	dLat := radiusMeters / metersPerDeg
-	cosLat := math.Cos(lat * math.Pi / 180)
-	dLng := radiusMeters / metersPerDeg
-	if cosLat > 1e-6 {
-		dLng = radiusMeters / (metersPerDeg * cosLat)
-	}
-	minLat, maxLat := lat-dLat, lat+dLat
-	minLng, maxLng := lng-dLng, lng+dLng
-	if minLat < -90 {
-		minLat = -90
-	}
-	if maxLat > 90 {
-		maxLat = 90
-	}
-	if minLng < -180 {
-		minLng = -180
-	}
-	if maxLng > 180 {
-		maxLng = 180
-	}
+	box := geoBoxAround(lat, lng, radiusMeters)
 
 	const maxRounds = 6
 	fetchSize := limit * 5
@@ -78,7 +58,7 @@ func (s *MessageService) ListNearby(ctx context.Context, lat, lng float64, radiu
 	filtered := make([]*model.Message, 0, limit)
 	cursor := beforeID
 	for round := 0; round < maxRounds && len(filtered) < limit; round++ {
-		list, err := s.msgRepo.ListNearbyByBox(ctx, minLat, maxLat, minLng, maxLng, cursor, fetchSize)
+		list, err := s.msgRepo.ListNearbyByBox(ctx, box.MinLat, box.MaxLat, box.MinLng, box.MaxLng, cursor, fetchSize)
 		if err != nil {
 			s.log.Error(ctx, "查询附近消息失败", logger.Error(err))
 			return nil, fmt.Errorf("查询失败: %w", err)
@@ -107,6 +87,22 @@ func (s *MessageService) ListNearby(ctx context.Context, lat, lng float64, radiu
 		return nil, err
 	}
 	return items, nil
+}
+
+func geoBoxAround(lat, lng, radiusMeters float64) repository.GeoBox {
+	const metersPerDeg = 111320.0
+	dLat := radiusMeters / metersPerDeg
+	cosLat := math.Cos(lat * math.Pi / 180)
+	dLng := radiusMeters / metersPerDeg
+	if cosLat > 1e-6 {
+		dLng = radiusMeters / (metersPerDeg * cosLat)
+	}
+	return repository.GeoBox{
+		MinLat: math.Max(lat-dLat, -90),
+		MaxLat: math.Min(lat+dLat, 90),
+		MinLng: math.Max(lng-dLng, -180),
+		MaxLng: math.Min(lng+dLng, 180),
+	}
 }
 
 func (s *MessageService) ListPrivate(ctx context.Context, userA, userB uint, beforeID uint, limit int) ([]types.MessageItem, uint, error) {
@@ -145,10 +141,11 @@ func (s *MessageService) ReportTarget(ctx context.Context, reporterID, targetID 
 		MessageType:    msg.ContentType,
 		Scope:          msg.Scope,
 		RoomID:         msg.RoomID,
+		PostID:         msg.PostID,
 		SentAt:         utils.FormatDateTime(msg.CreatedAt),
 	}
 	if msg.Scope == model.MessageScopePrivate {
-		snapshot.PeerID = msg.FromUserID
+		snapshot.PeerID = msg.ToUserID
 	}
 	profiles, err := s.userSvc.GetProfiles(ctx, []uint{msg.FromUserID})
 	if err != nil {

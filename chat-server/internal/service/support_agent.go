@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,18 +12,22 @@ import (
 	"app/internal/types"
 	"app/pkg/database"
 	"app/pkg/errs"
+
+	"gorm.io/gorm"
 )
+
+const supportLongWaitSec int64 = 120
 
 func (s *SupportService) CountQueue(ctx context.Context) (int64, error) {
 	return s.supportStateRepo.CountQueue(ctx)
 }
 
-func (s *SupportService) AdminListQueue(ctx context.Context, page, pageSize int) (*types.SupportAdminSessionListResponse, error) {
-	rows, total, err := s.supportStateRepo.ListQueue(ctx, page, pageSize)
+func (s *SupportService) AdminListQueue(ctx context.Context, req *types.SupportQueueQuery) (*types.SupportAdminSessionListResponse, error) {
+	rows, total, err := s.supportStateRepo.ListQueue(ctx, req.Page, req.PageSize, req.Keyword)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return s.toAdminList(ctx, 0, rows, total)
+	return s.toAdminList(ctx, 0, rows, total), nil
 }
 
 func (s *SupportService) AdminListMine(ctx context.Context, employeeID uint, page, pageSize int) (*types.SupportAdminSessionListResponse, error) {
@@ -30,7 +35,7 @@ func (s *SupportService) AdminListMine(ctx context.Context, employeeID uint, pag
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return s.toAdminList(ctx, employeeID, rows, total)
+	return s.toAdminList(ctx, employeeID, rows, total), nil
 }
 
 func (s *SupportService) AdminListMyClosed(ctx context.Context, employeeID uint, page, pageSize int) (*types.SupportAdminSessionListResponse, error) {
@@ -38,43 +43,129 @@ func (s *SupportService) AdminListMyClosed(ctx context.Context, employeeID uint,
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return s.toAdminList(ctx, employeeID, rows, total)
+	return s.toAdminList(ctx, employeeID, rows, total), nil
 }
 
-func (s *SupportService) AdminListActive(ctx context.Context, employeeID uint, page, pageSize int, assigneeEmployeeID uint, keyword string) (*types.SupportAdminSessionListResponse, error) {
-	if ok, err := s.hasViewAll(ctx, employeeID); err != nil || !ok {
-		return nil, errs.Forbidden("无权查看全部客服会话")
+func overviewFilter(req *types.SupportOverviewQuery) (repository.SupportOverviewFilter, error) {
+	f := repository.SupportOverviewFilter{
+		AssigneeEmployeeID: req.AssigneeEmployeeID,
+		Keyword:            strings.TrimSpace(req.Keyword),
 	}
-	rows, total, err := s.supportStateRepo.ListActive(ctx, page, pageSize, repository.SupportOverviewFilter{
-		AssigneeEmployeeID: assigneeEmployeeID,
-		Keyword:            keyword,
-	})
+	if req.StartDate != "" {
+		t, err := time.ParseInLocation("2006-01-02", req.StartDate, time.Local)
+		if err != nil {
+			return f, errs.Invalid("开始日期格式不正确")
+		}
+		f.From = t.Unix()
+	}
+	if req.EndDate != "" {
+		t, err := time.ParseInLocation("2006-01-02", req.EndDate, time.Local)
+		if err != nil {
+			return f, errs.Invalid("结束日期格式不正确")
+		}
+		f.To = t.AddDate(0, 0, 1).Unix()
+	}
+	if f.From > 0 && f.To > 0 && f.From >= f.To {
+		return f, errs.Invalid("开始日期不能晚于结束日期")
+	}
+	return f, nil
+}
+
+func (s *SupportService) AdminListActive(ctx context.Context, employeeID uint, req *types.SupportOverviewQuery) (*types.SupportAdminSessionListResponse, error) {
+	if err := s.requireViewAll(ctx, employeeID); err != nil {
+		return nil, err
+	}
+	f, err := overviewFilter(req)
+	if err != nil {
+		return nil, err
+	}
+	rows, total, err := s.supportStateRepo.ListActive(ctx, req.Page, req.PageSize, f)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return s.toAdminList(ctx, employeeID, rows, total)
+	return s.toAdminList(ctx, employeeID, rows, total), nil
 }
 
-func (s *SupportService) AdminListClosed(ctx context.Context, employeeID uint, page, pageSize int, assigneeEmployeeID uint, keyword string) (*types.SupportAdminSessionListResponse, error) {
-	if ok, err := s.hasViewAll(ctx, employeeID); err != nil || !ok {
-		return nil, errs.Forbidden("无权查看全部客服会话")
+func (s *SupportService) AdminListClosed(ctx context.Context, employeeID uint, req *types.SupportOverviewQuery) (*types.SupportAdminSessionListResponse, error) {
+	if err := s.requireViewAll(ctx, employeeID); err != nil {
+		return nil, err
 	}
-	rows, total, err := s.supportStateRepo.ListClosed(ctx, page, pageSize, repository.SupportOverviewFilter{
-		AssigneeEmployeeID: assigneeEmployeeID,
-		Keyword:            keyword,
-	})
+	f, err := overviewFilter(req)
+	if err != nil {
+		return nil, err
+	}
+	rows, total, err := s.supportStateRepo.ListClosed(ctx, req.Page, req.PageSize, f)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return s.toAdminList(ctx, employeeID, rows, total)
+	return s.toAdminList(ctx, employeeID, rows, total), nil
+}
+
+func (s *SupportService) AdminGetSession(ctx context.Context, employeeID, conversationID uint) (*types.SupportAdminSessionItem, error) {
+	if _, _, err := s.assertAgentAccess(ctx, employeeID, conversationID); err != nil {
+		return nil, err
+	}
+	return s.adminSessionItem(ctx, employeeID, conversationID)
+}
+
+func (s *SupportService) AdminListByUser(ctx context.Context, employeeID uint, req *types.SupportByUserQuery) (*types.SupportUserSessionListResponse, error) {
+	if err := s.requireViewAll(ctx, employeeID); err != nil {
+		return nil, err
+	}
+	rows, total, err := s.supportStateRepo.ListByUser(ctx, req.UserID, 0, req.Page, req.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	return s.toUserSessionList(ctx, rows, total), nil
+}
+
+// AdminListHistory 返回指定会话所属用户的其他客服会话，供坐席了解来访历史。
+func (s *SupportService) AdminListHistory(ctx context.Context, employeeID uint, req *types.SupportHistoryQuery) (*types.SupportUserSessionListResponse, error) {
+	st, _, err := s.assertAgentAccess(ctx, employeeID, req.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	rows, total, err := s.supportStateRepo.ListByUser(ctx, st.UserID, req.ConversationID, req.Page, req.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	return s.toUserSessionList(ctx, rows, total), nil
+}
+
+// AdminListAgents 返回可接待客服的员工（角色含接入权限或超级管理员），并标注是否在线。
+func (s *SupportService) AdminListAgents(ctx context.Context) (*types.SupportAgentListResponse, error) {
+	ids, err := s.supportStateRepo.ListAgentEmployeeIDs(ctx, permCodeSupportAccept, types.SuperAdminRoleCode)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	emps, err := s.employeeRepo.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	depIDs := make([]uint, 0, len(emps))
+	for _, e := range emps {
+		depIDs = append(depIDs, e.DepartmentID)
+	}
+	depNames := s.imSvc.departmentNames(ctx, depIDs)
+	online := s.imSvc.OnlineEmployees(ctx, ids)
+	list := make([]types.SupportAgentItem, 0, len(emps))
+	for _, e := range emps {
+		_, on := online[e.ID]
+		list = append(list, types.SupportAgentItem{
+			ID:             e.ID,
+			Name:           e.Name,
+			AvatarURL:      e.AvatarURL,
+			DepartmentName: depNames[e.DepartmentID],
+			Online:         on,
+		})
+	}
+	return &types.SupportAgentListResponse{List: list}, nil
 }
 
 func (s *SupportService) AdminOverviewSummary(ctx context.Context, employeeID uint) (*types.SupportOverviewSummaryResponse, error) {
-	if ok, err := s.hasViewAll(ctx, employeeID); err != nil || !ok {
-		return nil, errs.Forbidden("无权查看客服总览")
+	if err := s.requireViewAll(ctx, employeeID); err != nil {
+		return nil, err
 	}
-	const longWaitSec int64 = 120
-	now := time.Now().Unix()
 	queueCount, err := s.supportStateRepo.CountQueue(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
@@ -83,7 +174,7 @@ func (s *SupportService) AdminOverviewSummary(ctx context.Context, employeeID ui
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	longWait, err := s.supportStateRepo.CountQueueLongWait(ctx, longWaitSec, now)
+	longWait, err := s.supportStateRepo.CountQueueLongWait(ctx, supportLongWaitSec, time.Now().Unix())
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
@@ -92,6 +183,16 @@ func (s *SupportService) AdminOverviewSummary(ctx context.Context, employeeID ui
 		ActiveCount:        activeCount,
 		LongWaitQueueCount: longWait,
 	}, nil
+}
+
+func (s *SupportService) employeeName(ctx context.Context, id uint, fallback string) string {
+	if id == 0 {
+		return fallback
+	}
+	if e, err := s.employeeRepo.GetByID(ctx, id); err == nil && e != nil && e.Name != "" {
+		return e.Name
+	}
+	return fallback
 }
 
 func (s *SupportService) AdminAccept(ctx context.Context, employeeID, conversationID uint) (*types.SupportAdminSessionItem, error) {
@@ -107,11 +208,7 @@ func (s *SupportService) AdminAccept(ctx context.Context, employeeID, conversati
 		return nil, errs.Conflict("会话已被接入或不在排队中")
 	}
 	now := time.Now().Unix()
-	emp, _ := s.employeeRepo.GetByID(ctx, employeeID)
-	name := "客服"
-	if emp != nil && emp.Name != "" {
-		name = emp.Name
-	}
+	name := s.employeeName(ctx, employeeID, "客服")
 	var sys *types.IMMessageItem
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
 		ok, err := s.imSvc.SetConversationStatusIf(ctx, conversationID, model.IMConvStatusQueued, model.IMConvStatusActive)
@@ -142,14 +239,10 @@ func (s *SupportService) AdminAccept(ctx context.Context, employeeID, conversati
 	s.broadcastQueueUpdate(ctx)
 	s.notifyUserSession(ctx, st.UserID, conversationID)
 
-	item, err := s.adminSessionItem(ctx, employeeID, conversationID)
-	return item, err
+	return s.adminSessionItem(ctx, employeeID, conversationID)
 }
 
 func (s *SupportService) AdminTransfer(ctx context.Context, fromEmployeeID uint, req *types.SupportTransferRequest) error {
-	if req == nil {
-		return errs.Invalid("参数错误")
-	}
 	st, err := s.supportStateRepo.GetByConversationID(ctx, req.ConversationID)
 	if err != nil {
 		return errs.NotFound("会话不存在")
@@ -159,16 +252,9 @@ func (s *SupportService) AdminTransfer(ctx context.Context, fromEmployeeID uint,
 		return errs.Invalid("会话不可转接")
 	}
 	isAssignee := st.AssigneeEmployeeID == fromEmployeeID
-	if !isAssignee {
-		ok, err := s.hasViewAll(ctx, fromEmployeeID)
-		if err != nil || !ok {
-			return errs.Forbidden("仅当前坐席或督导可转接")
-		}
+	if !isAssignee && !s.hasViewAll(ctx, fromEmployeeID) {
+		return errs.Forbidden("仅当前坐席或督导可转接")
 	}
-	if req.ToEmployeeID == 0 {
-		return errs.Invalid("转接对象无效")
-	}
-
 	if req.ToEmployeeID == fromEmployeeID {
 		if isAssignee {
 			return errs.Invalid("转接对象无效")
@@ -181,17 +267,14 @@ func (s *SupportService) AdminTransfer(ctx context.Context, fromEmployeeID uint,
 		return errs.Invalid("目标坐席不可用")
 	}
 	if s.permSvc != nil {
-		ok, err := s.permSvc.CheckPermission(ctx, req.ToEmployeeID, "/api/admin/support/accept", "POST")
+		ok, err := s.permSvc.HasPermissionCode(ctx, req.ToEmployeeID, permCodeSupportAccept)
 		if err != nil || !ok {
 			return errs.Invalid("目标同事没有客服接入权限")
 		}
 	}
 	now := time.Now().Unix()
 	prevAssignee := st.AssigneeEmployeeID
-	operatorName := "客服"
-	if from, err := s.employeeRepo.GetByID(ctx, fromEmployeeID); err == nil && from != nil && from.Name != "" {
-		operatorName = from.Name
-	}
+	operatorName := s.employeeName(ctx, fromEmployeeID, "客服")
 	toName := to.Name
 	if toName == "" {
 		toName = "客服"
@@ -200,11 +283,7 @@ func (s *SupportService) AdminTransfer(ctx context.Context, fromEmployeeID uint,
 	if req.ToEmployeeID == fromEmployeeID {
 		sysText = fmt.Sprintf("%s 已接管本会话", operatorName)
 	} else if !isAssignee && prevAssignee > 0 {
-		prevName := "原坐席"
-		if e, err := s.employeeRepo.GetByID(ctx, prevAssignee); err == nil && e != nil && e.Name != "" {
-			prevName = e.Name
-		}
-		sysText = fmt.Sprintf("%s 已将会话从 %s 转接给 %s", operatorName, prevName, toName)
+		sysText = fmt.Sprintf("%s 已将会话从 %s 转接给 %s", operatorName, s.employeeName(ctx, prevAssignee, "原坐席"), toName)
 	}
 	var sys *types.IMMessageItem
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
@@ -230,14 +309,14 @@ func (s *SupportService) AdminTransfer(ctx context.Context, fromEmployeeID uint,
 	if sys != nil {
 		s.fanoutMessage(ctx, req.ConversationID, model.IMPrincipalSystem, 0, sys)
 	}
+	if prevAssignee > 0 && prevAssignee != req.ToEmployeeID {
+		_ = s.imSvc.ClearUnread(ctx, prevAssignee, req.ConversationID)
+	}
 	s.notifyUserSession(ctx, st.UserID, req.ConversationID)
 	return nil
 }
 
 func (s *SupportService) AdminClose(ctx context.Context, employeeID uint, req *types.SupportCloseRequest) error {
-	if req == nil {
-		return errs.Invalid("参数错误")
-	}
 	st, err := s.supportStateRepo.GetByConversationID(ctx, req.ConversationID)
 	if err != nil {
 		return errs.NotFound("会话不存在")
@@ -256,10 +335,6 @@ func (s *SupportService) AdminClose(ctx context.Context, employeeID uint, req *t
 		return errs.Forbidden("仅当前坐席可结案")
 	}
 	now := time.Now().Unix()
-	reason := strings.TrimSpace(req.Reason)
-	if reason == "" {
-		reason = "agent_close"
-	}
 	var sys *types.IMMessageItem
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
 		ok, err := s.imSvc.SetConversationStatusIf(ctx, req.ConversationID, model.IMConvStatusActive, model.IMConvStatusClosed)
@@ -271,7 +346,8 @@ func (s *SupportService) AdminClose(ctx context.Context, employeeID uint, req *t
 		}
 		if err := s.supportStateRepo.Update(ctx, req.ConversationID, map[string]any{
 			"close_at":     now,
-			"close_reason": reason,
+			"close_reason": req.Reason,
+			"close_note":   strings.TrimSpace(req.Note),
 		}); err != nil {
 			return fmt.Errorf("结案失败: %w", err)
 		}
@@ -283,6 +359,7 @@ func (s *SupportService) AdminClose(ctx context.Context, employeeID uint, req *t
 	if sys != nil {
 		s.fanoutMessage(ctx, req.ConversationID, model.IMPrincipalSystem, 0, sys)
 	}
+	_ = s.imSvc.ClearUnread(ctx, employeeID, req.ConversationID)
 	s.broadcastQueueUpdate(ctx)
 	s.notifyUserSession(ctx, st.UserID, req.ConversationID)
 	_ = s.clearUserUnread(ctx, st.UserID)
@@ -290,16 +367,13 @@ func (s *SupportService) AdminClose(ctx context.Context, employeeID uint, req *t
 }
 
 func (s *SupportService) AdminListMessages(ctx context.Context, employeeID, conversationID, beforeID uint, limit int) (*types.IMMessageListResponse, error) {
-	if err := s.assertAgentAccess(ctx, employeeID, conversationID); err != nil {
+	if _, _, err := s.assertAgentAccess(ctx, employeeID, conversationID); err != nil {
 		return nil, err
 	}
 	return s.listMessages(ctx, conversationID, beforeID, limit)
 }
 
 func (s *SupportService) AdminSend(ctx context.Context, employeeID uint, req *types.SupportSendRequest) (*types.IMMessageItem, error) {
-	if req == nil {
-		return nil, errs.Invalid("参数错误")
-	}
 	st, err := s.supportStateRepo.GetByConversationID(ctx, req.ConversationID)
 	if err != nil {
 		return nil, errs.NotFound("会话不存在")
@@ -317,12 +391,17 @@ func (s *SupportService) AdminSend(ctx context.Context, employeeID uint, req *ty
 	return s.sendAs(ctx, model.IMPrincipalEmployee, employeeID, req)
 }
 
+// AdminRead 只处理当前坐席自己的未读；督导旁观他人会话不产生已读记录。
 func (s *SupportService) AdminRead(ctx context.Context, employeeID uint, req *types.SupportReadRequest) error {
-	if req == nil {
-		return errs.Invalid("参数错误")
+	st, err := s.supportStateRepo.GetByConversationID(ctx, req.ConversationID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errs.NotFound("会话不存在")
+		}
+		return fmt.Errorf("查询失败: %w", err)
 	}
-	if err := s.assertAgentAccess(ctx, employeeID, req.ConversationID); err != nil {
-		return err
+	if st.AssigneeEmployeeID != employeeID {
+		return errs.Forbidden("仅当前坐席可标记已读")
 	}
 	if err := s.imSvc.MarkRead(ctx, req.ConversationID, model.IMPrincipalEmployee, employeeID, req.LastReadMsgID); err != nil {
 		return err

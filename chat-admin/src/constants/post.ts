@@ -28,6 +28,11 @@ export const POST_CATEGORY_OPTIONS: { value: PostCategoryValue; label: string }[
   { value: PostCategory.Help, label: '求助' },
 ]
 
+export const POST_SORT_OPTIONS = [
+  { label: '最新在前', value: 'desc' },
+  { label: '最早在前', value: 'asc' },
+] as const
+
 export enum SignupStatus {
   Confirmed = 1,
   Waitlisted = 2,

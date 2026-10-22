@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"app/internal/model"
@@ -11,15 +12,22 @@ import (
 )
 
 type PostListFilter struct {
-	Status         *uint8
-	UserID         *uint
-	RoomID         *uint
-	Category       string
-	Keyword        string
-	OnlyPublicNow  bool
-	ExcludeUserIDs []uint
-	Page           int
-	PageSize       int
+	ID               *uint
+	Status           *uint8
+	UserID           *uint
+	PublisherKeyword string
+	RoomID           *uint
+	Category         string
+	Keyword          string
+	StartTime        string
+	EndTime          string
+	OnlyPublicNow    bool
+	ExcludeUserIDs   []uint
+	PinnedFirst      bool
+	SortAsc          bool
+	IncludeDeleted   bool
+	Page             int
+	PageSize         int
 }
 
 type PostRepository interface {
@@ -27,6 +35,9 @@ type PostRepository interface {
 	Update(ctx context.Context, post *model.Post) error
 	SoftDelete(ctx context.Context, id uint) error
 	GetByID(ctx context.Context, id uint) (*model.Post, error)
+	GetByIDUnscoped(ctx context.Context, id uint) (*model.Post, error)
+	GetByIDs(ctx context.Context, ids []uint) ([]*model.Post, error)
+	GetByIDsUnscoped(ctx context.Context, ids []uint) ([]*model.Post, error)
 	List(ctx context.Context, f PostListFilter) ([]*model.Post, int64, error)
 	ListJoinedByUser(ctx context.Context, userID uint, f PostListFilter) ([]*model.Post, int64, error)
 	CountByStatus(ctx context.Context, status uint8) (int64, error)
@@ -70,13 +81,60 @@ func (r *postRepository) GetByID(ctx context.Context, id uint) (*model.Post, err
 	return &post, nil
 }
 
+func (r *postRepository) GetByIDUnscoped(ctx context.Context, id uint) (*model.Post, error) {
+	var post model.Post
+	if err := database.Conn(ctx, r.db).Unscoped().First(&post, id).Error; err != nil {
+		return nil, err
+	}
+	return &post, nil
+}
+
+func (r *postRepository) GetByIDs(ctx context.Context, ids []uint) ([]*model.Post, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var list []*model.Post
+	if err := database.Conn(ctx, r.db).Where("id IN ?", ids).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+func (r *postRepository) GetByIDsUnscoped(ctx context.Context, ids []uint) ([]*model.Post, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var list []*model.Post
+	if err := database.Conn(ctx, r.db).Unscoped().Where("id IN ?", ids).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// contentLikePattern 生成 %kw% 模式，并转义用户输入中的 LIKE 通配符。
+func contentLikePattern(kw string) string {
+	return "%" + likeEscaper.Replace(kw) + "%"
+}
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 func (r *postRepository) List(ctx context.Context, f PostListFilter) ([]*model.Post, int64, error) {
 	db := database.Conn(ctx, r.db).Model(&model.Post{})
+	if f.IncludeDeleted {
+		db = db.Unscoped()
+	}
+	if f.ID != nil {
+		db = db.Where("id = ?", *f.ID)
+	}
 	if f.Status != nil {
 		db = db.Where("status = ?", *f.Status)
 	}
 	if f.UserID != nil {
 		db = db.Where("user_id = ?", *f.UserID)
+	}
+	if f.PublisherKeyword != "" {
+		like := contentLikePattern(f.PublisherKeyword)
+		db = db.Where("user_id IN (SELECT id FROM `user` WHERE nickname LIKE ? OR mobile LIKE ?)", like, like)
 	}
 	if len(f.ExcludeUserIDs) > 0 {
 		db = db.Where("user_id NOT IN ?", f.ExcludeUserIDs)
@@ -88,8 +146,14 @@ func (r *postRepository) List(ctx context.Context, f PostListFilter) ([]*model.P
 		db = db.Where("category = ?", f.Category)
 	}
 	if f.Keyword != "" {
-		kw := "%" + f.Keyword + "%"
-		db = db.Where("title LIKE ? OR place_name LIKE ?", kw, kw)
+		like := contentLikePattern(f.Keyword)
+		db = db.Where("title LIKE ? OR place_name LIKE ? OR content LIKE ?", like, like, like)
+	}
+	if f.StartTime != "" {
+		db = db.Where("created_at >= ?", f.StartTime)
+	}
+	if f.EndTime != "" {
+		db = db.Where("created_at <= ?", f.EndTime)
 	}
 	if f.OnlyPublicNow {
 		db = db.Where("status = ?", model.PostStatusPublished).
@@ -101,9 +165,12 @@ func (r *postRepository) List(ctx context.Context, f PostListFilter) ([]*model.P
 		return nil, 0, err
 	}
 
-	order := "created_at DESC"
-	if f.RoomID != nil && *f.RoomID > 0 {
-		order = "pinned DESC, created_at DESC"
+	order := "created_at DESC, id DESC"
+	if f.SortAsc {
+		order = "created_at ASC, id ASC"
+	}
+	if f.PinnedFirst {
+		order = "pinned DESC, " + order
 	}
 
 	var list []*model.Post

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"app/internal/model"
 	"app/internal/repository"
@@ -12,19 +13,28 @@ import (
 	"app/pkg/auth"
 	"app/pkg/errs"
 	"app/pkg/logger"
+	"app/pkg/utils"
 
 	"gorm.io/gorm"
 )
 
+var employeeLoginStatusText = map[uint8]string{
+	0:                      "失败",
+	model.SMSStatusSuccess: "成功",
+}
+
 func (s *EmployeeService) AdminList(ctx context.Context, req *types.EmployeeListRequest) (*types.EmployeeListResponse, error) {
 	filter := repository.EmployeeListFilter{
-		Mobile:    req.Mobile,
-		Name:      req.Name,
-		Status:    req.Status,
-		StartTime: req.StartTime,
-		EndTime:   req.EndTime,
-		Page:      req.Page,
-		PageSize:  req.PageSize,
+		ID:         req.ID,
+		Mobile:     strings.TrimSpace(req.Mobile),
+		Name:       strings.TrimSpace(req.Name),
+		EmployeeNo: strings.TrimSpace(req.EmployeeNo),
+		RoleID:     req.RoleID,
+		Status:     req.Status,
+		StartTime:  req.StartTime,
+		EndTime:    req.EndTime,
+		Page:       req.Page,
+		PageSize:   req.PageSize,
 	}
 	if req.DepartmentID != nil && *req.DepartmentID > 0 {
 		ids, err := s.departmentSubtreeIDs(ctx, *req.DepartmentID)
@@ -53,10 +63,19 @@ func (s *EmployeeService) AdminList(ctx context.Context, req *types.EmployeeList
 		s.log.Error(ctx, "查询员工角色失败", logger.Error(err))
 		return nil, fmt.Errorf("查询员工列表失败: %w", err)
 	}
+	employeeIDs := make([]uint, 0, len(employees))
+	for _, e := range employees {
+		employeeIDs = append(employeeIDs, e.ID)
+	}
+	lastLogins, err := s.loginRecordRepo.LatestSuccessByEmployeeIDs(ctx, employeeIDs)
+	if err != nil {
+		s.log.Error(ctx, "查询员工最近登录失败", logger.Error(err))
+		return nil, fmt.Errorf("查询员工列表失败: %w", err)
+	}
 
 	list := make([]types.EmployeeItem, 0, len(employees))
 	for _, e := range employees {
-		list = append(list, toEmployeeItem(e, rolesByEmployee[e.ID], departmentNameByID[e.DepartmentID]))
+		list = append(list, toEmployeeItem(e, rolesByEmployee[e.ID], departmentNameByID[e.DepartmentID], lastLogins[e.ID]))
 	}
 	return &types.EmployeeListResponse{Total: total, List: list}, nil
 }
@@ -123,7 +142,7 @@ func (s *EmployeeService) employeeRoleBriefs(ctx context.Context, employees []*m
 		roles := make([]types.EmployeeRoleBrief, 0)
 		for _, rid := range roleIDsByEmployee[e.ID] {
 			if r, ok := roleByID[rid]; ok {
-				roles = append(roles, types.EmployeeRoleBrief{ID: r.ID, Name: r.Name, Code: r.Code})
+				roles = append(roles, toEmployeeRoleBrief(r))
 			}
 		}
 		sort.SliceStable(roles, func(i, j int) bool {
@@ -132,6 +151,10 @@ func (s *EmployeeService) employeeRoleBriefs(ctx context.Context, employees []*m
 		out[e.ID] = roles
 	}
 	return out, nil
+}
+
+func toEmployeeRoleBrief(r *model.Role) types.EmployeeRoleBrief {
+	return types.EmployeeRoleBrief{ID: r.ID, Name: r.Name, Code: r.Code, Status: r.Status}
 }
 
 func (s *EmployeeService) AdminCreate(ctx context.Context, req *types.CreateEmployeeRequest) (uint, error) {
@@ -152,7 +175,6 @@ func (s *EmployeeService) AdminCreate(ctx context.Context, req *types.CreateEmpl
 		Mobile:       req.Mobile,
 		Name:         req.Name,
 		EmployeeNo:   req.EmployeeNo,
-		AvatarURL:    req.AvatarURL,
 		DepartmentID: deptID,
 		Status:       req.Status,
 		Remark:       req.Remark,
@@ -165,12 +187,9 @@ func (s *EmployeeService) AdminCreate(ctx context.Context, req *types.CreateEmpl
 }
 
 func (s *EmployeeService) AdminUpdate(ctx context.Context, req *types.UpdateEmployeeRequest) error {
-	employee, err := s.employeeRepo.GetByID(ctx, req.ID)
+	employee, err := s.getEmployee(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errs.NotFound("员工不存在")
-		}
-		return fmt.Errorf("系统错误，请稍后重试: %w", err)
+		return err
 	}
 
 	if req.Mobile != employee.Mobile {
@@ -183,16 +202,17 @@ func (s *EmployeeService) AdminUpdate(ctx context.Context, req *types.UpdateEmpl
 		}
 	}
 
+	deptID := employee.DepartmentID
+	if req.DepartmentID != employee.DepartmentID {
+		deptID, _, err = s.resolveDepartment(ctx, req.DepartmentID)
+		if err != nil {
+			return err
+		}
+	}
 	employee.Mobile = req.Mobile
 	employee.Name = req.Name
 	employee.EmployeeNo = req.EmployeeNo
-	employee.AvatarURL = req.AvatarURL
-	deptID, _, err := s.resolveDepartment(ctx, req.DepartmentID)
-	if err != nil {
-		return err
-	}
 	employee.DepartmentID = deptID
-	employee.Status = req.Status
 	employee.Remark = req.Remark
 	if err := s.employeeRepo.Update(ctx, employee); err != nil {
 		s.log.Error(ctx, "更新员工失败", logger.Error(err))
@@ -205,12 +225,9 @@ func (s *EmployeeService) AdminUpdateStatus(ctx context.Context, operatorID, id 
 	if operatorID == id && status != model.EmployeeStatusEnabled {
 		return errs.Forbidden("不能禁用自己的账号")
 	}
-	employee, err := s.employeeRepo.GetByID(ctx, id)
+	employee, err := s.getEmployee(ctx, id)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errs.NotFound("员工不存在")
-		}
-		return fmt.Errorf("系统错误，请稍后重试: %w", err)
+		return err
 	}
 	if status != model.EmployeeStatusEnabled {
 		isTargetSuper, err := s.permSvc.IsSuperAdmin(ctx, id)
@@ -232,30 +249,67 @@ func (s *EmployeeService) AdminUpdateStatus(ctx context.Context, operatorID, id 
 	return nil
 }
 
-func (s *EmployeeService) AdminListRoles(ctx context.Context, employeeID uint) ([]types.RoleItem, error) {
-	roleIDs, err := s.employeeRoleRepo.ListRoleIDsByEmployeeID(ctx, employeeID)
+func (s *EmployeeService) AdminRoleOptions(ctx context.Context, operatorID, employeeID uint) (*types.EmployeeRoleOptionsResponse, error) {
+	var assignedIDs []uint
+	if employeeID > 0 {
+		if _, err := s.getEmployee(ctx, employeeID); err != nil {
+			return nil, err
+		}
+		ids, err := s.employeeRoleRepo.ListRoleIDsByEmployeeID(ctx, employeeID)
+		if err != nil {
+			return nil, fmt.Errorf("获取员工角色失败: %w", err)
+		}
+		assignedIDs = ids
+	}
+	enabled := model.RoleStatusEnabled
+	roles, _, err := s.roleRepo.List(ctx, repository.RoleListFilter{Status: &enabled, Page: 1, PageSize: 1000})
 	if err != nil {
-		return nil, fmt.Errorf("获取员工角色失败: %w", err)
+		return nil, fmt.Errorf("获取角色失败: %w", err)
 	}
-	if len(roleIDs) == 0 {
-		return []types.RoleItem{}, nil
-	}
-
-	roles, err := s.roleRepo.GetByIDs(ctx, roleIDs)
-	if err != nil {
-		return nil, fmt.Errorf("获取角色详情失败: %w", err)
-	}
-
-	items := make([]types.RoleItem, 0, len(roles))
+	seen := make(map[uint]struct{}, len(roles))
 	for _, r := range roles {
-		items = append(items, toRoleItem(r))
+		seen[r.ID] = struct{}{}
 	}
-	return items, nil
+	missing := make([]uint, 0)
+	for _, id := range assignedIDs {
+		if _, ok := seen[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		extra, err := s.roleRepo.GetByIDs(ctx, missing)
+		if err != nil {
+			return nil, fmt.Errorf("获取角色失败: %w", err)
+		}
+		roles = append(roles, extra...)
+	}
+
+	out := &types.EmployeeRoleOptionsResponse{
+		Options:     make([]types.EmployeeRoleBrief, 0, len(roles)),
+		AssignedIDs: assignedIDs,
+	}
+	if out.AssignedIDs == nil {
+		out.AssignedIDs = []uint{}
+	}
+	for _, r := range roles {
+		out.Options = append(out.Options, toEmployeeRoleBrief(r))
+		if r.Code == types.SuperAdminRoleCode && containsUint(assignedIDs, r.ID) {
+			out.TargetIsSuper = true
+		}
+	}
+	sort.SliceStable(out.Options, func(i, j int) bool {
+		return out.Options[i].ID < out.Options[j].ID
+	})
+	out.OperatorIsSuper, err = s.permSvc.IsSuperAdmin(ctx, operatorID)
+	if err != nil {
+		return nil, fmt.Errorf("校验操作者权限失败: %w", err)
+	}
+	return out, nil
 }
 
 func (s *EmployeeService) AdminAssignRoles(ctx context.Context, operatorID uint, req *types.AssignEmployeeRolesRequest) error {
-	if _, err := s.employeeRepo.GetByID(ctx, req.EmployeeID); err != nil {
-		return errs.NotFound("员工不存在")
+	if _, err := s.getEmployee(ctx, req.EmployeeID); err != nil {
+		return err
 	}
 
 	existingRoleIDs, err := s.employeeRoleRepo.ListRoleIDsByEmployeeID(ctx, req.EmployeeID)
@@ -276,18 +330,20 @@ func (s *EmployeeService) AdminAssignRoles(ctx context.Context, operatorID uint,
 		}
 	}
 
+	roleIDs := uniqueUints(req.RoleIDs)
 	containsSuperAdminRole := false
-	if len(req.RoleIDs) > 0 {
-		roles, err := s.roleRepo.GetByIDs(ctx, req.RoleIDs)
+	if len(roleIDs) > 0 {
+		roles, err := s.roleRepo.GetByIDs(ctx, roleIDs)
 		if err != nil {
 			return fmt.Errorf("查询角色失败: %w", err)
 		}
-		if len(roles) != len(req.RoleIDs) {
+		if len(roles) != len(roleIDs) {
 			return errs.NotFound("部分角色不存在")
 		}
 		for _, role := range roles {
-			if role.Status != model.RoleStatusEnabled {
-				return errs.Invalid("不能分配已禁用角色")
+			// 已分配的禁用角色允许原样保留，只禁止新分配禁用角色。
+			if role.Status != model.RoleStatusEnabled && !containsUint(existingRoleIDs, role.ID) {
+				return errs.Invalid(fmt.Sprintf("角色「%s」已禁用，不能分配", role.Name))
 			}
 			if role.Code == types.SuperAdminRoleCode {
 				containsSuperAdminRole = true
@@ -301,34 +357,63 @@ func (s *EmployeeService) AdminAssignRoles(ctx context.Context, operatorID uint,
 			return fmt.Errorf("校验操作者权限失败: %w", err)
 		}
 		if !isOperatorSuperAdmin {
-			if containsSuperAdminRole {
+			if containsSuperAdminRole && !targetHadSuperAdmin {
 				return errs.Forbidden("仅超级管理员可分配超级管理员角色")
 			}
-			return errs.Forbidden("仅超级管理员可调整超级管理员角色")
+			return errs.Forbidden("仅超级管理员可调整超级管理员的角色")
 		}
 	}
 	if targetHadSuperAdmin && !containsSuperAdminRole {
 		return errs.Forbidden("不能移除超级管理员角色")
 	}
 
-	if len(req.RoleIDs) == 0 {
-		if err := s.employeeRoleRepo.ReplaceByEmployeeID(ctx, req.EmployeeID, nil); err != nil {
-			s.log.Error(ctx, "清空员工角色失败", logger.Error(err), logger.Uint("employeeId", req.EmployeeID))
-			return fmt.Errorf("分配角色失败: %w", err)
-		}
-		s.permSvc.InvalidateEmployeePermCache(ctx, req.EmployeeID)
-		return nil
-	}
-
-	items := make([]*model.EmployeeRole, 0, len(req.RoleIDs))
-	for _, rid := range req.RoleIDs {
+	items := make([]*model.EmployeeRole, 0, len(roleIDs))
+	for _, rid := range roleIDs {
 		items = append(items, &model.EmployeeRole{EmployeeID: req.EmployeeID, RoleID: rid})
 	}
 	if err := s.employeeRoleRepo.ReplaceByEmployeeID(ctx, req.EmployeeID, items); err != nil {
+		s.log.Error(ctx, "分配员工角色失败", logger.Error(err), logger.Uint("employeeId", req.EmployeeID))
 		return fmt.Errorf("分配角色失败: %w", err)
 	}
 	s.permSvc.InvalidateEmployeePermCache(ctx, req.EmployeeID)
 	return nil
+}
+
+func (s *EmployeeService) AdminLoginRecords(ctx context.Context, req *types.EmployeeLoginRecordListRequest) (*types.EmployeeLoginRecordListResponse, error) {
+	employee, err := s.getEmployee(ctx, req.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	rows, total, err := s.loginRecordRepo.ListByEmployee(ctx, employee.ID, employee.Mobile, req.Page, req.PageSize)
+	if err != nil {
+		s.log.Error(ctx, "查询员工登录记录失败", logger.Error(err))
+		return nil, fmt.Errorf("查询登录记录失败: %w", err)
+	}
+	list := make([]types.EmployeeLoginRecordItem, 0, len(rows))
+	for _, r := range rows {
+		list = append(list, types.EmployeeLoginRecordItem{
+			ID:         r.ID,
+			LoginType:  r.LoginType,
+			IP:         r.IP,
+			UserAgent:  r.UserAgent,
+			Status:     r.Status,
+			StatusText: utils.TextOf(employeeLoginStatusText, r.Status),
+			Remark:     r.Remark,
+			CreatedAt:  utils.FormatDateTime(r.CreatedAt),
+		})
+	}
+	return &types.EmployeeLoginRecordListResponse{Total: total, List: list}, nil
+}
+
+func (s *EmployeeService) getEmployee(ctx context.Context, id uint) (*model.Employee, error) {
+	employee, err := s.employeeRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errs.NotFound("员工不存在")
+		}
+		return nil, fmt.Errorf("系统错误，请稍后重试: %w", err)
+	}
+	return employee, nil
 }
 
 func (s *EmployeeService) departmentSubtreeIDs(ctx context.Context, departmentID uint) ([]uint, error) {
@@ -345,4 +430,29 @@ func (s *EmployeeService) departmentSubtreeIDs(ctx context.Context, departmentID
 		ids = append(ids, d.ID)
 	}
 	return ids, nil
+}
+
+func containsUint(list []uint, v uint) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func uniqueUints(list []uint) []uint {
+	seen := make(map[uint]struct{}, len(list))
+	out := make([]uint, 0, len(list))
+	for _, v := range list {
+		if v == 0 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }

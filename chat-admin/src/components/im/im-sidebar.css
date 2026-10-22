@@ -1,4 +1,5 @@
-.im-shell {
+.im-shell,
+.im-vars {
   --im-bg: #f0f2f5;
   --im-panel: #ffffff;
   --im-border: #e8eaed;
@@ -9,7 +10,9 @@
   --im-bubble-mine-text: #ffffff;
   --im-sidebar-w: 320px;
   --im-radius: 12px;
+}
 
+.im-shell {
   display: flex;
   height: calc(100vh - 104px);
   min-height: 560px;
@@ -87,6 +90,18 @@
   color: var(--el-color-danger);
 }
 
+.im-tab__unread {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--el-color-danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
 .im-sidebar__search {
   padding: 0 12px 10px;
 }
@@ -115,7 +130,12 @@
   background: rgba(0, 0, 0, 0.035);
 }
 
-.im-list-item:disabled {
+.im-list-item:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: -2px;
+}
+
+.im-list-item.is-disabled {
   background: transparent;
   cursor: not-allowed;
   opacity: 0.6;

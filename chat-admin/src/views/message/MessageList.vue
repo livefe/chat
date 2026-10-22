@@ -4,17 +4,23 @@
       <template #header>
         <div class="card-header">
           <span>{{ route.meta.title }}</span>
+          <div v-if="selected.length" class="card-header-actions">
+            <span class="sub">已选 {{ selected.length }} 条</span>
+            <el-button type="danger" plain @click="deleteRef?.open(selected)">批量删除</el-button>
+          </div>
         </div>
       </template>
 
       <MessageFilter
+        v-model:id="query.id"
         v-model:user-id="query.userId"
         v-model:peer-user-id="query.peerUserId"
         v-model:room-id="query.roomId"
         v-model:post-id="query.postId"
         v-model:scope="query.scope"
         v-model:keyword="query.keyword"
-        v-model:date-range="dateRange"
+        v-model:start-time="query.startTime"
+        v-model:end-time="query.endTime"
         @search="handleSearch"
         @reset="handleReset"
       />
@@ -22,60 +28,48 @@
       <MessageTable
         :list="list"
         :loading="loading"
+        :error="error"
         :total="total"
         v-model:page="query.page"
         v-model:page-size="query.pageSize"
-        @context="(row) => contextRef?.open(row)"
-        @delete="handleDelete"
+        @context="(row) => contextRef?.open(row.id)"
+        @delete="(row) => deleteRef?.open([row])"
+        @selection-change="(rows) => (selected = rows)"
         @page-change="fetchList"
       />
     </el-card>
 
     <MessageContextDialog ref="contextRef" />
+    <MessageDeleteDialog ref="deleteRef" @success="fetchList" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { deleteMessage, getMessageList, type AdminMessageItem } from '@/api/message'
-import { usePaginatedList } from '@/composables/usePaginatedList'
-import { useRouteQuery } from '@/composables/useRouteQuery'
-import { MessageScope } from '@/constants/message'
-import { confirmAndRun } from '@/utils/confirm'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
+import { getMessageList, type AdminMessageItem } from '@/api/message'
+import { useListQuery } from '@/composables/useListQuery'
+import { usePermission } from '@/composables/usePermission'
+import { PERM } from '@/constants/permission'
 import MessageContextDialog from './MessageContextDialog.vue'
+import MessageDeleteDialog from './MessageDeleteDialog.vue'
 import MessageFilter from './MessageFilter.vue'
 import MessageTable from './MessageTable.vue'
 
 const route = useRoute()
-const dateRange = ref<[string, string] | null>(null)
+const router = useRouter()
+const { can } = usePermission()
 const contextRef = ref<InstanceType<typeof MessageContextDialog>>()
+const deleteRef = ref<InstanceType<typeof MessageDeleteDialog>>()
+const selected = ref<AdminMessageItem[]>([])
 
-const {
-  loading,
-  list,
-  total,
-  query,
-  fetchList,
-  handleSearch,
-  handleReset: doReset,
-} = usePaginatedList(
-  (q) =>
-    getMessageList({
-      page: q.page,
-      pageSize: q.pageSize,
-      userId: q.userId || undefined,
-      peerUserId: q.peerUserId || undefined,
-      roomId: q.roomId || undefined,
-      postId: q.postId || undefined,
-      scope: q.scope,
-      keyword: q.keyword || undefined,
-      startTime: q.startTime || undefined,
-      endTime: q.endTime || undefined,
-    }),
-  {
+const { loading, error, list, total, query, fetchList, handleSearch, handleReset } = useListQuery({
+  fetch: (q) => getMessageList(q),
+  defaults: {
     page: 1,
     pageSize: 20,
+    id: undefined as number | undefined,
     userId: undefined as number | undefined,
     peerUserId: undefined as number | undefined,
     roomId: undefined as number | undefined,
@@ -85,79 +79,31 @@ const {
     startTime: '',
     endTime: '',
   },
-  '获取消息列表失败',
-)
-
-type IdKey = 'userId' | 'peerUserId' | 'roomId' | 'postId'
-
-function idField(key: IdKey) {
-  return {
-    key,
-    apply: (v: string, q: typeof query) => {
-      const id = Number(v)
-      if (!Number.isNaN(id) && id > 0) q[key] = id
-    },
-    clear: (q: typeof query) => {
-      q[key] = undefined
-    },
-  }
-}
-
-const { wrapReset } = useRouteQuery(
-  query,
-  [
-    idField('userId'),
-    idField('peerUserId'),
-    idField('roomId'),
-    idField('postId'),
-    {
-      key: 'scope',
-      apply: (v, q) => {
-        const s = Number(v)
-        if (!Number.isNaN(s)) q.scope = s
-      },
-      clear: (q) => {
-        q.scope = undefined
-      },
-    },
-    {
-      key: 'keyword',
-      apply: (v, q) => {
-        q.keyword = v
-      },
-      clear: (q) => {
-        q.keyword = ''
-      },
-    },
-  ],
-  {
-    onApplied: () => {
-      if (query.roomId && query.scope === undefined) {
-        query.scope = MessageScope.Room
-      }
-      if (query.postId && query.scope === undefined) {
-        query.scope = MessageScope.Post
-      }
-      query.page = 1
-      fetchList()
-    },
+  schema: {
+    id: 'number',
+    userId: 'number',
+    peerUserId: 'number',
+    roomId: 'number',
+    postId: 'number',
+    scope: 'number',
+    keyword: 'string',
+    startTime: 'string',
+    endTime: 'string',
   },
-)
-
-watch(dateRange, (val) => {
-  query.startTime = val?.[0] || ''
-  query.endTime = val?.[1] || ''
+  errorMessage: '获取消息列表失败',
 })
 
-const handleReset = wrapReset(() => {
-  dateRange.value = null
-  doReset()
-})
-
-async function handleDelete(row: AdminMessageItem) {
-  await confirmAndRun(`确定删除消息 #${row.id} 吗？`, async () => {
-    await deleteMessage(row.id)
-    await fetchList()
-  })
+/** ?contextId=<消息ID> 打开该消息的上下文，打开后从地址栏移除，避免刷新时重复弹出。 */
+function openContextFromRoute() {
+  const raw = route.query.contextId
+  const id = Number(Array.isArray(raw) ? raw[0] : raw)
+  if (!Number.isInteger(id) || id <= 0) return
+  const rest = { ...route.query }
+  delete rest.contextId
+  void router.replace({ path: route.path, query: rest })
+  if (can(PERM.ChatMessageContext)) void contextRef.value?.open(id)
 }
+
+onMounted(openContextFromRoute)
+watch(() => route.query.contextId, openContextFromRoute)
 </script>

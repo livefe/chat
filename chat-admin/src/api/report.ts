@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { UserGovernanceSummary } from './user'
 
 export interface ReportContextSnapshot {
   nickname?: string
@@ -10,6 +11,7 @@ export interface ReportContextSnapshot {
   messageType?: number
   scope?: number
   roomId?: number
+  postId?: number
   peerId?: number
   sentAt?: string
 }
@@ -24,6 +26,9 @@ export interface ReportItem {
   targetId: number
   targetUserId: number
   targetUserName?: string
+  targetUserMobile?: string
+  /** 仅详情接口返回。 */
+  targetUser?: UserGovernanceSummary
   reason: number
   reasonText: string
   content: string
@@ -42,13 +47,19 @@ export interface ReportItem {
   updatedAt: string
 }
 
+/** status 为待处理时按提交时间正序返回（先进先出）。 */
 export interface ReportListRequest {
   page: number
   pageSize: number
   status?: number
   targetType?: number
+  targetId?: number
+  targetUserId?: number
+  reporterId?: number
   reason?: number
   keyword?: string
+  startTime?: string
+  endTime?: string
 }
 
 export interface ReportListResponse {
@@ -59,9 +70,12 @@ export interface ReportListResponse {
 export interface HandleReportRequest {
   id: number
   status: number
-  handleResult?: string
-  action?: number
-  muteHours?: number
+  handleResult: string
+  action: number
+  /** 禁言小时数，-1 永久；仅禁言动作使用。 */
+  muteDuration: number
+  /** 同对象的其它待处理举报按相同结果一并结案。 */
+  resolveSameTarget: boolean
 }
 
 export const getReportList = (params: ReportListRequest) =>
@@ -71,4 +85,4 @@ export const getReportDetail = (id: number) =>
   request.get<ReportItem>('/api/admin/report/detail', { id })
 
 export const handleReport = (data: HandleReportRequest) =>
-  request.post('/api/admin/report/handle', data)
+  request.post<{ resolvedCount: number }>('/api/admin/report/handle', data)

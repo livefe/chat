@@ -42,18 +42,25 @@ type IMOpenDMRequest struct {
 	PeerEmployeeID uint `json:"peerEmployeeId" binding:"required"`
 }
 
+type IMConversationQuery struct {
+	PageQuery
+	Keyword string `form:"keyword" binding:"max=64"`
+}
+
 type IMConversationItem struct {
-	ID            uint   `json:"id"`
-	Type          uint8  `json:"type"`
-	Title         string `json:"title"`
-	PeerID        uint   `json:"peerId"`
-	PeerName      string `json:"peerName"`
-	PeerAvatarURL string `json:"peerAvatarUrl"`
-	LastMessageID uint   `json:"lastMessageId"`
-	LastContent   string `json:"lastContent"`
-	LastActiveAt  int64  `json:"lastActiveAt"`
-	UnreadCount   int64  `json:"unreadCount"`
-	Pinned        bool   `json:"pinned"`
+	ID                 uint   `json:"id"`
+	Type               uint8  `json:"type"`
+	Title              string `json:"title"`
+	PeerID             uint   `json:"peerId"`
+	PeerName           string `json:"peerName"`
+	PeerAvatarURL      string `json:"peerAvatarUrl"`
+	PeerDepartmentName string `json:"peerDepartmentName"`
+	PeerOnline         bool   `json:"peerOnline"`
+	LastMessageID      uint   `json:"lastMessageId"`
+	LastContent        string `json:"lastContent"`
+	LastActiveAt       int64  `json:"lastActiveAt"`
+	UnreadCount        int64  `json:"unreadCount"`
+	Pinned             bool   `json:"pinned"`
 }
 
 type IMConversationListResponse struct {

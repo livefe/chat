@@ -18,7 +18,7 @@ fun FeedbackItemDto.toDomain(): FeedbackItem = FeedbackItem(
     images = images,
     status = status,
     statusText = statusText,
-    reply = reply,
+    handleResult = handleResult,
     handledAt = handledAt,
     createdAt = createdAt,
 )

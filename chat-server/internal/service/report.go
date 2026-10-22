@@ -28,7 +28,7 @@ var (
 	reportTargetTypeText = map[uint8]string{
 		model.ReportTargetUser:    "用户",
 		model.ReportTargetMessage: "消息",
-		model.ReportTargetPost:    "动态",
+		model.ReportTargetPost:    "帖子",
 	}
 	reportReasonText = map[uint8]string{
 		model.ReportReasonSpam:         "垃圾广告",
@@ -50,7 +50,7 @@ var (
 		model.ReportHandleActionDeleteContent: "删除内容",
 		model.ReportHandleActionMute:          "禁言用户",
 		model.ReportHandleActionDisableUser:   "禁用账号",
-		model.ReportHandleActionDisablePost:   "下架动态",
+		model.ReportHandleActionDisablePost:   "下架帖子",
 	}
 	validReportReasons = map[uint8]struct{}{
 		model.ReportReasonSpam:         {},

@@ -65,24 +65,55 @@ type UserItem struct {
 	MutedUntil  int64  `json:"mutedUntil"`
 	MuteText    string `json:"muteText"`
 	Deactivated bool   `json:"deactivated"`
+	LastLoginAt string `json:"lastLoginAt"`
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
 }
 
 type CreateUserRequest struct {
 	Mobile   string `json:"mobile" binding:"required,mobile"`
-	Nickname string `json:"nickname" binding:"omitempty,max=32"`
+	Nickname string `json:"nickname" binding:"required,max=32"`
 	Status   uint8  `json:"status" binding:"oneof=0 1"`
 }
 
+// UpdateUserRequest Mobile 为空表示不修改；账号状态只能走状态接口，以便记录原因。
 type UpdateUserRequest struct {
-	ID uint `json:"id" binding:"required"`
-	CreateUserRequest
+	ID       uint   `json:"id" binding:"required"`
+	Mobile   string `json:"mobile" binding:"omitempty,mobile"`
+	Nickname string `json:"nickname" binding:"required,max=32"`
 }
 
 type UpdateUserStatusRequest struct {
-	ID     uint  `json:"id" binding:"required"`
-	Status uint8 `json:"status" binding:"oneof=0 1"`
+	ID     uint   `json:"id" binding:"required"`
+	Status uint8  `json:"status" binding:"oneof=0 1"`
+	Reason string `json:"reason" binding:"max=200"`
+}
+
+type BatchUserStatusRequest struct {
+	IDs    []uint `json:"ids" binding:"required,min=1,max=100"`
+	Status uint8  `json:"status" binding:"oneof=0 1"`
+	Reason string `json:"reason" binding:"max=200"`
+}
+
+type BatchUserMuteRequest struct {
+	IDs      []uint `json:"ids" binding:"required,min=1,max=100"`
+	Duration int    `json:"duration" binding:"min=-1,max=87600"`
+	Reason   string `json:"reason" binding:"max=200"`
+}
+
+type BatchUserResult struct {
+	Updated int `json:"updated"`
+	Skipped int `json:"skipped"`
+}
+
+type RevealMobileResponse struct {
+	Mobile string `json:"mobile"`
+}
+
+type AdminUserSubListRequest struct {
+	UserID   uint `form:"userId" binding:"required"`
+	Page     int  `form:"page" binding:"required,min=1"`
+	PageSize int  `form:"pageSize" binding:"required,min=1,max=100"`
 }
 
 type DeactivationRequest struct {
@@ -110,7 +141,7 @@ type ChangeMobileRequest struct {
 
 type AdminDeactivateUserRequest struct {
 	ID     uint   `json:"id" binding:"required"`
-	Reason string `json:"reason" binding:"max=200"`
+	Reason string `json:"reason" binding:"required,max=200"`
 }
 
 type AdminUserMuteRequest struct {
@@ -123,10 +154,50 @@ type LoginRecordItem struct {
 	ID         uint   `json:"id"`
 	LoginType  string `json:"loginType"`
 	IP         string `json:"ip"`
+	UserAgent  string `json:"userAgent"`
 	Status     uint8  `json:"status"`
 	StatusText string `json:"statusText"`
 	Remark     string `json:"remark"`
 	CreatedAt  string `json:"createdAt"`
+}
+
+type LoginRecordListResponse struct {
+	Total int64             `json:"total"`
+	List  []LoginRecordItem `json:"list"`
+}
+
+type UserPunishmentItem struct {
+	ID           uint   `json:"id"`
+	UserID       uint   `json:"userId"`
+	Action       uint8  `json:"action"`
+	ActionText   string `json:"actionText"`
+	MuteUntil    int64  `json:"muteUntil"`
+	MuteText     string `json:"muteText"`
+	TargetID     uint   `json:"targetId"`
+	Reason       string `json:"reason"`
+	EmployeeID   uint   `json:"employeeId"`
+	EmployeeName string `json:"employeeName"`
+	ReportID     uint   `json:"reportId"`
+	CreatedAt    string `json:"createdAt"`
+}
+
+type UserPunishmentListResponse struct {
+	Total int64                `json:"total"`
+	List  []UserPunishmentItem `json:"list"`
+}
+
+// UserGovernanceSummary 举报审核时展示的被举报用户现状。
+type UserGovernanceSummary struct {
+	UserID          uint   `json:"userId"`
+	Nickname        string `json:"nickname"`
+	Mobile          string `json:"mobile"`
+	AvatarURL       string `json:"avatarUrl"`
+	Status          uint8  `json:"status"`
+	StatusText      string `json:"statusText"`
+	MuteText        string `json:"muteText"`
+	Deactivated     bool   `json:"deactivated"`
+	ReportCount     int64  `json:"reportCount"`
+	PunishmentCount int64  `json:"punishmentCount"`
 }
 
 type UserDeactivationLogItem struct {
@@ -141,7 +212,6 @@ type UserDeactivationLogItem struct {
 
 type AdminUserDetailResponse struct {
 	UserItem
-	LoginRecords     []LoginRecordItem         `json:"loginRecords"`
 	DeactivationLogs []UserDeactivationLogItem `json:"deactivationLogs"`
 	Rooms            []AdminUserRoomSummary    `json:"rooms"`
 }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -15,8 +14,6 @@ import (
 	"app/pkg/errs"
 	"app/pkg/logger"
 	"app/pkg/utils"
-
-	"gorm.io/gorm"
 )
 
 type PermissionService struct {
@@ -38,12 +35,11 @@ var (
 		model.PermissionTypeMenu:   "菜单",
 		model.PermissionTypeButton: "按钮",
 		model.PermissionTypeAPI:    "接口",
-		model.PermissionTypeData:   "数据",
 	}
 )
 
 func isCapabilityType(t uint8) bool {
-	return t == model.PermissionTypeMenu || t == model.PermissionTypeButton || t == model.PermissionTypeData
+	return t == model.PermissionTypeMenu || t == model.PermissionTypeButton
 }
 
 func NewPermissionService(
@@ -207,69 +203,34 @@ func (s *PermissionService) ensureCodeAvailable(ctx context.Context, permType ui
 	return nil
 }
 
-func (s *PermissionService) AdminGet(ctx context.Context, id uint) (*types.PermissionItem, error) {
-	p, err := s.permissionRepo.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errs.NotFound("权限不存在")
-		}
-		return nil, fmt.Errorf("查询权限失败: %w", err)
-	}
-	item := toPermissionItem(p)
-	return &item, nil
-}
-
-func (s *PermissionService) AdminList(ctx context.Context, req *types.PermissionListRequest) (*types.PermissionListResponse, error) {
-	perms, total, err := s.permissionRepo.List(ctx, repository.PermissionListFilter{
-		Name: req.Name, Code: req.Code,
-		Type: req.Type, Status: req.Status,
-		Page: req.Page, PageSize: req.PageSize,
-	})
-	if err != nil {
-		s.log.Error(ctx, "查询权限列表失败", logger.Error(err))
-		return nil, fmt.Errorf("查询权限列表失败: %w", err)
-	}
-
-	list := make([]types.PermissionItem, 0, len(perms))
-	for _, p := range perms {
-		list = append(list, toPermissionItem(p))
-	}
-	return &types.PermissionListResponse{Total: total, List: list}, nil
-}
-
+// AdminTree 管理页返回全部权限（含禁用）；assignableOnly 时只返回可分配的启用菜单与按钮。
 func (s *PermissionService) AdminTree(ctx context.Context, assignableOnly bool) ([]*types.PermissionTreeItem, error) {
 	perms, err := s.permissionRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("查询权限失败: %w", err)
 	}
 
-	enabled := make([]*model.Permission, 0, len(perms))
+	selected := make([]*model.Permission, 0, len(perms))
 	for _, p := range perms {
-		if p.Status != model.PermissionStatusEnabled {
+		if assignableOnly && (p.Status != model.PermissionStatusEnabled || !isCapabilityType(p.Type)) {
 			continue
 		}
-		if assignableOnly && !isCapabilityType(p.Type) {
-			continue
-		}
-		enabled = append(enabled, p)
+		selected = append(selected, p)
 	}
-	sort.SliceStable(enabled, func(i, j int) bool {
-		if enabled[i].Sort != enabled[j].Sort {
-			return enabled[i].Sort < enabled[j].Sort
+	sort.SliceStable(selected, func(i, j int) bool {
+		if selected[i].Sort != selected[j].Sort {
+			return selected[i].Sort < selected[j].Sort
 		}
-		return enabled[i].ID < enabled[j].ID
+		return selected[i].ID < selected[j].ID
 	})
 
-	nodes := make(map[uint]*types.PermissionTreeItem, len(enabled))
-	for _, p := range enabled {
-		nodes[p.ID] = &types.PermissionTreeItem{
-			ID: p.ID, Name: p.Name, Code: p.Code, Type: p.Type, ParentID: p.ParentID,
-			Path: p.Path, Method: p.Method, Sort: p.Sort,
-		}
+	nodes := make(map[uint]*types.PermissionTreeItem, len(selected))
+	for _, p := range selected {
+		nodes[p.ID] = &types.PermissionTreeItem{PermissionItem: toPermissionItem(p)}
 	}
 
 	tree := make([]*types.PermissionTreeItem, 0)
-	for _, p := range enabled {
+	for _, p := range selected {
 		node := nodes[p.ID]
 		if parent, ok := nodes[p.ParentID]; p.ParentID > 0 && ok {
 			parent.Children = append(parent.Children, node)

@@ -23,9 +23,12 @@
       </el-form-item>
       <el-form-item label="状态">
         <el-radio-group v-model="form.status">
-          <el-radio :label="1">启用</el-radio>
-          <el-radio :label="0">禁用</el-radio>
+          <el-radio :value="1">启用</el-radio>
+          <el-radio :value="0">禁用</el-radio>
         </el-radio-group>
+        <div v-if="form.status === 0" class="form-tip is-warning">
+          禁用后，持有该角色的员工将立即失去该角色带来的权限
+        </div>
       </el-form-item>
     </el-form>
     <template #footer>
@@ -69,16 +72,20 @@ watch(visible, (v) => {
 
 async function handleSubmit() {
   if (!formRef.value) return
-  await formRef.value.validate()
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   saving.value = true
   try {
     if (form.id) await updateRole(form)
     else await createRole(form)
-    ElMessage.success('操作成功')
+    ElMessage.success(form.id ? '已保存' : '已新增')
     visible.value = false
     emit('success')
   } catch (e) {
-    showApiError(e, '操作失败')
+    showApiError(e, '保存失败')
   } finally {
     saving.value = false
   }

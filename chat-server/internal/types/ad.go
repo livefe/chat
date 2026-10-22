@@ -67,10 +67,17 @@ type AdminAdCampaignSaveRequest struct {
 }
 
 type AdminAdCampaignListRequest struct {
-	Status   *uint8 `form:"status"`
-	Keyword  string `form:"keyword"`
-	Page     int    `form:"page" binding:"required,min=1"`
-	PageSize int    `form:"pageSize" binding:"required,min=1,max=100"`
+	Status         *uint8 `form:"status"`
+	Keyword        string `form:"keyword" binding:"max=80"`
+	AdvertiserName string `form:"advertiserName" binding:"max=80"`
+	StartDate      string `form:"startDate" binding:"omitempty,datetime=2006-01-02"`
+	EndDate        string `form:"endDate" binding:"omitempty,datetime=2006-01-02"`
+	Page           int    `form:"page" binding:"required,min=1"`
+	PageSize       int    `form:"pageSize" binding:"required,min=1,max=100"`
+}
+
+type AdminAdAdvertiserListResponse struct {
+	List []string `json:"list"`
 }
 
 type AdminAdCampaignItem struct {
@@ -109,14 +116,25 @@ type AdminAdCampaignListResponse struct {
 	List  []AdminAdCampaignItem `json:"list"`
 }
 
+// AdminAdUpdateStatusRequest 的 Status：1 提交审核、2 恢复投放（仅已暂停）、4 暂停、5 结束。
 type AdminAdUpdateStatusRequest struct {
+	ID     uint  `json:"id" binding:"required"`
+	Status uint8 `json:"status" binding:"required,oneof=1 2 4 5"`
+}
+
+type AdminAdAuditRequest struct {
 	ID           uint   `json:"id" binding:"required"`
-	Status       uint8  `json:"status" binding:"required"`
+	Action       string `json:"action" binding:"required,oneof=approve reject"`
 	RejectRemark string `json:"rejectRemark" binding:"max=200"`
 }
 
 type AdminAdBatchPauseRequest struct {
 	IDs []uint `json:"ids" binding:"required,min=1,max=100"`
+}
+
+type AdminAdBatchPauseResponse struct {
+	Paused  int64 `json:"paused"`
+	Skipped int64 `json:"skipped"`
 }
 
 type AdminAdCopyRequest struct {
@@ -125,8 +143,8 @@ type AdminAdCopyRequest struct {
 
 type AdminAdDailyStatRequest struct {
 	CampaignID uint   `form:"campaignId" binding:"required"`
-	FromDate   string `form:"fromDate"`
-	ToDate     string `form:"toDate"`
+	FromDate   string `form:"fromDate" binding:"omitempty,datetime=2006-01-02"`
+	ToDate     string `form:"toDate" binding:"omitempty,datetime=2006-01-02"`
 }
 
 type AdminAdDailyStatItem struct {
@@ -137,7 +155,9 @@ type AdminAdDailyStatItem struct {
 }
 
 type AdminAdDailyStatResponse struct {
-	List []AdminAdDailyStatItem `json:"list"`
+	FromDate string                 `json:"fromDate"`
+	ToDate   string                 `json:"toDate"`
+	List     []AdminAdDailyStatItem `json:"list"`
 }
 
 type AdminAdSetting struct {

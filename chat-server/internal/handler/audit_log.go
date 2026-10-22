@@ -31,6 +31,28 @@ func (h *AuditLogHandler) List(c *gin.Context) {
 	response.Success(c, "", result)
 }
 
+func (h *AuditLogHandler) Options(c *gin.Context) {
+	result, err := h.auditLogSvc.Options(c.Request.Context())
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *AuditLogHandler) EmployeeOptions(c *gin.Context) {
+	var req types.AuditEmployeeOptionsRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.auditLogSvc.EmployeeOptions(c.Request.Context(), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
 func (h *AuditLogHandler) Detail(c *gin.Context) {
 	var req types.IDRequest
 	if !bindQuery(c, &req) {

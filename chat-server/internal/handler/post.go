@@ -277,14 +277,40 @@ func (h *PostHandler) AdminSignupList(c *gin.Context) {
 	response.Success(c, "", result)
 }
 
+func (h *PostHandler) AdminUserSignupList(c *gin.Context) {
+	var req types.AdminUserSignupListRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.postSvc.AdminListUserSignups(c.Request.Context(), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
 func (h *PostHandler) AdminUpdateStatus(c *gin.Context) {
 	var req types.UpdatePostStatusRequest
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.postSvc.AdminUpdateStatus(c.Request.Context(), req.ID, req.Status); err != nil {
+	if err := h.postSvc.AdminUpdateStatus(c.Request.Context(), middleware.CurrentEmployeeID(c), &req); err != nil {
 		response.WriteError(c, err)
 		return
 	}
 	response.Success(c, "更新成功", nil)
+}
+
+func (h *PostHandler) AdminBatchUpdateStatus(c *gin.Context) {
+	var req types.BatchUpdatePostStatusRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	result, err := h.postSvc.AdminBatchUpdateStatus(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "批量操作完成", result)
 }

@@ -21,14 +21,26 @@ type PostSignupRepository interface {
 	ListByUserAndPostIDs(ctx context.Context, userID uint, postIDs []uint) (map[uint]*model.PostSignup, error)
 	GetFirstWaitlisted(ctx context.Context, postID uint) (*model.PostSignup, error)
 	ListByPost(ctx context.Context, f SignupListFilter) ([]*model.PostSignup, int64, error)
+	ListByUser(ctx context.Context, userID uint, page, pageSize int) ([]*model.PostSignup, int64, error)
 }
 
+const (
+	SignupSortCreatedAt   = "createdAt"
+	SignupSortCheckedInAt = "checkedInAt"
+)
+
 type SignupListFilter struct {
-	PostID   uint
-	Status   *uint8
-	CheckIn  *uint8
-	Page     int
-	PageSize int
+	PostID  uint
+	Status  *uint8
+	CheckIn *uint8
+	UserID  *uint
+	Keyword string
+	// KeywordMatchMobile 为 false 时关键词只匹配昵称（发布者端不允许按手机号检索报名人）。
+	KeywordMatchMobile bool
+	SortField          string
+	SortDesc           bool
+	Page               int
+	PageSize           int
 }
 
 type SignupSummary struct {
@@ -194,6 +206,17 @@ func (r *postSignupRepository) ListByPost(ctx context.Context, f SignupListFilte
 	} else if f.Status != nil {
 		db = db.Where("status = ?", *f.Status)
 	}
+	if f.UserID != nil {
+		db = db.Where("user_id = ?", *f.UserID)
+	}
+	if f.Keyword != "" {
+		like := contentLikePattern(f.Keyword)
+		if f.KeywordMatchMobile {
+			db = db.Where("user_id IN (SELECT id FROM `user` WHERE nickname LIKE ? OR mobile LIKE ?)", like, like)
+		} else {
+			db = db.Where("user_id IN (SELECT id FROM `user` WHERE nickname LIKE ?)", like)
+		}
+	}
 
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -201,9 +224,42 @@ func (r *postSignupRepository) ListByPost(ctx context.Context, f SignupListFilte
 	}
 
 	var list []*model.PostSignup
-	if err := db.Order("status ASC, created_at ASC").
+	if err := db.Order(signupListOrder(f.SortField, f.SortDesc)).
 		Offset((f.Page - 1) * f.PageSize).
 		Limit(f.PageSize).
+		Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
+func signupListOrder(field string, desc bool) string {
+	dir := "ASC"
+	if desc {
+		dir = "DESC"
+	}
+	switch field {
+	case SignupSortCreatedAt:
+		return "created_at " + dir + ", id " + dir
+	case SignupSortCheckedInAt:
+		return "checked_in_at = 0 ASC, checked_in_at " + dir + ", id " + dir
+	default:
+		return "status ASC, created_at ASC, id ASC"
+	}
+}
+
+func (r *postSignupRepository) ListByUser(ctx context.Context, userID uint, page, pageSize int) ([]*model.PostSignup, int64, error) {
+	db := database.Conn(ctx, r.db).Model(&model.PostSignup{}).Where("user_id = ?", userID)
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var list []*model.PostSignup
+	if err := db.Order("id DESC").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
 		Find(&list).Error; err != nil {
 		return nil, 0, err
 	}

@@ -1,27 +1,59 @@
 <template>
-  <el-table :data="list" v-loading="loading" empty-text="暂无权限">
-    <el-table-column prop="id" label="ID" width="70" />
-    <el-table-column prop="name" label="名称" />
-    <el-table-column prop="code" label="编码" />
-    <el-table-column prop="typeText" label="类型" width="80" />
-    <el-table-column prop="path" label="路径" />
-    <el-table-column prop="method" label="方法" width="80" />
-    <el-table-column prop="sort" label="排序" width="80" />
-    <el-table-column label="状态" width="80">
+  <el-table
+    :key="tableKey"
+    :data="data"
+    v-loading="loading"
+    row-key="id"
+    :default-expand-all="expandAll"
+    :tree-props="{ children: 'children' }"
+  >
+    <template #empty>
+      <TableEmpty :error="error" text="暂无权限" @retry="emit('retry')" />
+    </template>
+    <el-table-column prop="name" label="名称" min-width="220" />
+    <el-table-column label="类型" width="80">
       <template #default="{ row }">
-        <el-tag :type="row.status === 1 ? 'success' : 'danger'">{{ row.statusText }}</el-tag>
+        <el-tag :type="permissionTypeTag(row.type)" size="small" effect="light">
+          {{ row.typeText }}
+        </el-tag>
       </template>
     </el-table-column>
-    <el-table-column prop="createdAt" label="创建时间" width="180" />
-    <el-table-column label="操作" width="120" fixed="right">
+    <el-table-column prop="code" label="编码" min-width="200" />
+    <el-table-column label="路径" min-width="220" show-overflow-tooltip>
+      <template #default="{ row }">
+        <template v-if="row.path">
+          <span v-if="row.method" class="perm-method">{{ row.method }}</span>
+          {{ row.path }}
+        </template>
+        <span v-else class="sub">-</span>
+      </template>
+    </el-table-column>
+    <el-table-column prop="sort" label="排序" width="70" />
+    <el-table-column label="状态" width="80">
+      <template #default="{ row }">
+        <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+          {{ row.statusText }}
+        </el-tag>
+      </template>
+    </el-table-column>
+    <el-table-column label="操作" width="170" fixed="right">
       <template #default="{ row }">
         <div class="action-cell">
+          <el-button
+            v-if="can(PERM.OrgPermissionCreate) && row.type === PermissionType.Menu"
+            size="small"
+            link
+            type="primary"
+            @click="emit('add-child', row as PermissionTreeItem)"
+          >
+            下级
+          </el-button>
           <el-button
             v-if="can(PERM.OrgPermissionUpdate)"
             size="small"
             link
             type="primary"
-            @click="emit('edit', row as PermissionItem)"
+            @click="emit('edit', row as PermissionTreeItem)"
           >
             编辑
           </el-button>
@@ -30,7 +62,7 @@
             size="small"
             link
             type="danger"
-            @click="emit('delete', row as PermissionItem)"
+            @click="emit('delete', row as PermissionTreeItem)"
           >
             删除
           </el-button>
@@ -38,40 +70,39 @@
       </template>
     </el-table-column>
   </el-table>
-
-  <div class="pagination">
-    <el-pagination
-      v-model:current-page="page"
-      v-model:page-size="pageSize"
-      :total="total"
-      :page-sizes="PAGE_SIZES"
-      :layout="PAGINATION_LAYOUT"
-      @size-change="emit('page-change')"
-      @current-change="emit('page-change')"
-    />
-  </div>
 </template>
 
 <script setup lang="ts">
-import type { PermissionItem } from '@/api/permission'
+import type { PermissionTreeItem } from '@/api/permission'
+import TableEmpty from '@/components/common/TableEmpty.vue'
 import { usePermission } from '@/composables/usePermission'
-import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
-import { PERM } from '@/constants/permission'
+import { PERM, PermissionType } from '@/constants/permission'
+import { permissionTypeTag } from '@/utils/permission'
 
 defineProps<{
-  list: PermissionItem[]
+  data: PermissionTreeItem[]
   loading: boolean
-  total: number
+  error?: boolean
+  expandAll: boolean
+  tableKey: string
 }>()
 
-const page = defineModel<number>('page', { required: true })
-const pageSize = defineModel<number>('pageSize', { required: true })
-
 const emit = defineEmits<{
-  edit: [row: PermissionItem]
-  delete: [row: PermissionItem]
-  'page-change': []
+  retry: []
+  'add-child': [row: PermissionTreeItem]
+  edit: [row: PermissionTreeItem]
+  delete: [row: PermissionTreeItem]
 }>()
 
 const { can } = usePermission()
 </script>
+
+<style scoped>
+.perm-method {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+</style>

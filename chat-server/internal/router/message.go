@@ -22,6 +22,6 @@ func registerMessageRoutes(engine *gin.Engine, h *container.Handlers) {
 	{
 		admin.GET("/list", msg.AdminMessageList)
 		admin.GET("/context", msg.AdminMessageContext)
-		admin.POST("/delete", msg.AdminMessageDelete)
+		admin.POST("/batch/delete", msg.AdminMessageBatchDelete)
 	}
 }

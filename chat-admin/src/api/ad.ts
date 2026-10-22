@@ -36,6 +36,9 @@ export interface AdCampaignListRequest {
   pageSize: number
   keyword?: string
   status?: number
+  advertiserName?: string
+  startDate?: string
+  endDate?: string
 }
 
 export interface AdCampaignListResponse {
@@ -82,23 +85,27 @@ export interface UploadMediaResponse {
 export const getAdCampaignList = (params: AdCampaignListRequest) =>
   request.get<AdCampaignListResponse>('/api/admin/ad/campaign/list', params)
 
+export const getAdAdvertisers = () =>
+  request.get<{ list: string[] }>('/api/admin/ad/campaign/advertisers')
+
 export const getAdCampaignDetail = (id: number) =>
   request.get<AdCampaignItem>('/api/admin/ad/campaign/detail', { id })
 
-export const createAdCampaign = (data: AdCampaignSaveRequest) =>
+export const saveAdCampaign = (data: AdCampaignSaveRequest & { id?: number }) =>
   request.post<{ id: number }>('/api/admin/ad/campaign/save', data)
 
-export const updateAdCampaign = (data: AdCampaignSaveRequest & { id: number }) =>
-  request.post<{ id: number }>('/api/admin/ad/campaign/save', data)
+/** status：1 提交审核、2 恢复投放（仅已暂停）、4 暂停、5 结束 */
+export const updateAdCampaignStatus = (data: { id: number; status: number }) =>
+  request.post('/api/admin/ad/campaign/update/status', data)
 
-export const updateAdCampaignStatus = (data: {
+export const auditAdCampaign = (data: {
   id: number
-  status: number
+  action: 'approve' | 'reject'
   rejectRemark?: string
-}) => request.post('/api/admin/ad/campaign/update/status', data)
+}) => request.post('/api/admin/ad/campaign/audit', data)
 
 export const batchPauseAdCampaigns = (ids: number[]) =>
-  request.post('/api/admin/ad/campaign/batch/pause', { ids })
+  request.post<{ paused: number; skipped: number }>('/api/admin/ad/campaign/batch/pause', { ids })
 
 export const copyAdCampaign = (id: number) =>
   request.post<{ id: number }>('/api/admin/ad/campaign/copy', { id })
@@ -107,7 +114,11 @@ export const getAdCampaignDailyStats = (params: {
   campaignId: number
   fromDate?: string
   toDate?: string
-}) => request.get<{ list: AdDailyStatItem[] }>('/api/admin/ad/campaign/daily-stats', params)
+}) =>
+  request.get<{ fromDate: string; toDate: string; list: AdDailyStatItem[] }>(
+    '/api/admin/ad/campaign/daily-stats',
+    params,
+  )
 
 export const uploadAdImage = (file: File) => {
   const form = new FormData()

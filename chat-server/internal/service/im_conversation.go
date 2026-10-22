@@ -70,8 +70,8 @@ func (s *IMService) OpenDM(ctx context.Context, selfID, peerID uint) (*types.IMC
 	return s.conversationItemFor(ctx, selfID, conv.ID, peer)
 }
 
-func (s *IMService) ListConversations(ctx context.Context, employeeID uint, page, pageSize int) (*types.IMConversationListResponse, error) {
-	rows, total, err := s.memberRepo.ListConversationsByEmployee(ctx, employeeID, page, pageSize)
+func (s *IMService) ListConversations(ctx context.Context, employeeID uint, req *types.IMConversationQuery) (*types.IMConversationListResponse, error) {
+	rows, total, err := s.memberRepo.ListConversationsByEmployee(ctx, employeeID, req.Keyword, req.Page, req.PageSize)
 	if err != nil {
 		s.log.Error(ctx, "IM会话列表失败", logger.Error(err))
 		return nil, fmt.Errorf("查询失败: %w", err)
@@ -84,9 +84,13 @@ func (s *IMService) ListConversations(ctx context.Context, employeeID uint, page
 	}
 	peers, _ := s.employeeRepo.GetByIDs(ctx, peerIDs)
 	peerMap := make(map[uint]*model.Employee, len(peers))
+	depIDs := make([]uint, 0, len(peers))
 	for _, p := range peers {
 		peerMap[p.ID] = p
+		depIDs = append(depIDs, p.DepartmentID)
 	}
+	depNames := s.departmentNames(ctx, depIDs)
+	online := s.OnlineEmployees(ctx, peerIDs)
 	unreadMap, _ := s.UnreadMap(ctx, employeeID)
 
 	list := make([]types.IMConversationItem, 0, len(rows))
@@ -105,6 +109,8 @@ func (s *IMService) ListConversations(ctx context.Context, employeeID uint, page
 		if p := peerMap[row.PeerID]; p != nil {
 			item.PeerName = p.Name
 			item.PeerAvatarURL = p.AvatarURL
+			item.PeerDepartmentName = depNames[p.DepartmentID]
+			_, item.PeerOnline = online[p.ID]
 			if item.Title == "" {
 				item.Title = p.Name
 			}
@@ -142,17 +148,20 @@ func (s *IMService) conversationItemFor(ctx context.Context, selfID, conversatio
 		return nil, fmt.Errorf("打开会话失败: %w", err)
 	}
 	unreadMap, _ := s.UnreadMap(ctx, selfID)
+	_, online := s.OnlineEmployees(ctx, []uint{peer.ID})[peer.ID]
 	item := &types.IMConversationItem{
-		ID:            conv.ID,
-		Type:          conv.Type,
-		Title:         peer.Name,
-		PeerID:        peer.ID,
-		PeerName:      peer.Name,
-		PeerAvatarURL: peer.AvatarURL,
-		LastMessageID: conv.LastMessageID,
-		LastContent:   conv.LastContent,
-		LastActiveAt:  conv.LastActiveAt,
-		UnreadCount:   unreadMap[strconv.FormatUint(uint64(conv.ID), 10)],
+		ID:                 conv.ID,
+		Type:               conv.Type,
+		Title:              peer.Name,
+		PeerID:             peer.ID,
+		PeerName:           peer.Name,
+		PeerAvatarURL:      peer.AvatarURL,
+		PeerDepartmentName: s.departmentNames(ctx, []uint{peer.DepartmentID})[peer.DepartmentID],
+		PeerOnline:         online,
+		LastMessageID:      conv.LastMessageID,
+		LastContent:        conv.LastContent,
+		LastActiveAt:       conv.LastActiveAt,
+		UnreadCount:        unreadMap[strconv.FormatUint(uint64(conv.ID), 10)],
 	}
 	return item, nil
 }

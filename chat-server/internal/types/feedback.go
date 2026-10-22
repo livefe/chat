@@ -13,17 +13,30 @@ type MyFeedbackListRequest struct {
 }
 
 type AdminFeedbackListRequest struct {
-	Status   *uint8 `form:"status"`
-	Type     *uint8 `form:"type"`
-	Keyword  string `form:"keyword"`
-	Page     int    `form:"page" binding:"required,min=1"`
-	PageSize int    `form:"pageSize" binding:"required,min=1,max=100"`
+	Status    *uint8 `form:"status"`
+	Type      *uint8 `form:"type"`
+	UserID    uint   `form:"userId"`
+	Keyword   string `form:"keyword"`
+	StartTime string `form:"startTime"`
+	EndTime   string `form:"endTime"`
+	Page      int    `form:"page" binding:"required,min=1"`
+	PageSize  int    `form:"pageSize" binding:"required,min=1,max=100"`
 }
 
 type AdminFeedbackUpdateStatusRequest struct {
 	ID           uint   `json:"id" binding:"required"`
 	Status       uint8  `json:"status" binding:"required,min=1,max=2"`
-	HandleResult string `json:"handleResult"`
+	HandleResult string `json:"handleResult" binding:"max=500"`
+}
+
+type AdminFeedbackBatchCloseRequest struct {
+	IDs          []uint `json:"ids" binding:"required,min=1,max=100"`
+	HandleResult string `json:"handleResult" binding:"max=500"`
+}
+
+type AdminFeedbackBatchResult struct {
+	Updated int64 `json:"updated"`
+	Skipped int64 `json:"skipped"`
 }
 
 type FeedbackItem struct {

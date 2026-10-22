@@ -12,7 +12,7 @@ data class FeedbackItemDto(
     val images: List<String> = emptyList(),
     val status: Int = 0,
     val statusText: String = "",
-    val reply: String = "",
+    val handleResult: String = "",
     val handledAt: String = "",
     val createdAt: String = "",
 )

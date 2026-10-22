@@ -3,6 +3,7 @@ import { request } from './http'
 export interface AdminPendingCounts {
   imUnread: number
   supportQueue: number
+  supportUnread: number
   reportPending: number
   feedbackPending: number
   roomAuditPending: number

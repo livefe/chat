@@ -156,12 +156,12 @@ private fun FeedbackDetailContent(detail: FeedbackItem, modifier: Modifier) {
                 color = AppColors.TextSecondary,
                 modifier = Modifier.padding(bottom = AppSpacing.S),
             )
-            if (detail.reply.isNotBlank() || detail.handledAt.isNotBlank()) {
-                if (detail.reply.isNotBlank()) {
-                    DetailBlock(stringResource(R.string.feedback_detail_reply), detail.reply)
+            if (detail.handleResult.isNotBlank() || detail.handledAt.isNotBlank()) {
+                if (detail.handleResult.isNotBlank()) {
+                    DetailBlock(stringResource(R.string.feedback_detail_reply), detail.handleResult)
                 }
                 if (detail.handledAt.isNotBlank()) {
-                    if (detail.reply.isNotBlank()) {
+                    if (detail.handleResult.isNotBlank()) {
                         HorizontalDivider(
                             color = AppColors.Divider,
                             modifier = Modifier.padding(vertical = AppSpacing.S),

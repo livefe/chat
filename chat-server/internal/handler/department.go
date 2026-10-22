@@ -19,11 +19,7 @@ func NewDepartmentHandler(log *logger.Logger, deptSvc *service.DepartmentService
 }
 
 func (h *DepartmentHandler) ListDepartments(c *gin.Context) {
-	var req types.DepartmentListRequest
-	if !bindQuery(c, &req) {
-		return
-	}
-	result, err := h.deptSvc.List(c.Request.Context(), &req)
+	result, err := h.deptSvc.List(c.Request.Context())
 	if err != nil {
 		response.WriteError(c, err)
 		return

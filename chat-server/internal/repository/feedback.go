@@ -11,12 +11,14 @@ import (
 )
 
 type FeedbackListFilter struct {
-	UserID   *uint
-	Status   *uint8
-	Type     *uint8
-	Keyword  string
-	Page     int
-	PageSize int
+	UserID    uint
+	Status    *uint8
+	Type      *uint8
+	Keyword   string
+	StartTime string
+	EndTime   string
+	Page      int
+	PageSize  int
 }
 
 type FeedbackRepository interface {
@@ -26,6 +28,7 @@ type FeedbackRepository interface {
 	List(ctx context.Context, f FeedbackListFilter) ([]*model.Feedback, int64, error)
 	CountByUserBetween(ctx context.Context, userID uint, start, end time.Time) (int64, error)
 	CountByStatus(ctx context.Context, status uint8) (int64, error)
+	UpdatePendingByIDs(ctx context.Context, ids []uint, updates map[string]any) (int64, error)
 }
 
 type feedbackRepository struct {
@@ -53,8 +56,8 @@ func (r *feedbackRepository) GetByID(ctx context.Context, id uint) (*model.Feedb
 }
 
 func applyFeedbackListFilter(db *gorm.DB, f FeedbackListFilter) *gorm.DB {
-	if f.UserID != nil {
-		db = db.Where("user_id = ?", *f.UserID)
+	if f.UserID > 0 {
+		db = db.Where("user_id = ?", f.UserID)
 	}
 	if f.Status != nil {
 		db = db.Where("`status` = ?", *f.Status)
@@ -64,9 +67,25 @@ func applyFeedbackListFilter(db *gorm.DB, f FeedbackListFilter) *gorm.DB {
 	}
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
-		db = db.Where("content LIKE ? OR contact LIKE ?", kw, kw)
+		db = db.Where("content LIKE ? OR contact LIKE ? OR handle_result LIKE ?", kw, kw, kw)
+	}
+	if f.StartTime != "" {
+		db = db.Where("created_at >= ?", f.StartTime)
+	}
+	if f.EndTime != "" {
+		db = db.Where("created_at <= ?", f.EndTime)
 	}
 	return db
+}
+
+func (r *feedbackRepository) UpdatePendingByIDs(ctx context.Context, ids []uint, updates map[string]any) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	res := database.Conn(ctx, r.db).Model(&model.Feedback{}).
+		Where("id IN ? AND `status` = ?", ids, model.FeedbackStatusPending).
+		Updates(updates)
+	return res.RowsAffected, res.Error
 }
 
 func (r *feedbackRepository) List(ctx context.Context, f FeedbackListFilter) ([]*model.Feedback, int64, error) {

@@ -38,10 +38,10 @@
           show-word-limit
         />
       </el-form-item>
-      <el-form-item label="状态" prop="status">
+      <el-form-item v-if="!form.id" label="状态" prop="status">
         <el-radio-group v-model="form.status">
-          <el-radio :label="1">启用</el-radio>
-          <el-radio :label="0">禁用</el-radio>
+          <el-radio :value="1">启用</el-radio>
+          <el-radio :value="0">禁用</el-radio>
         </el-radio-group>
       </el-form-item>
     </el-form>
@@ -105,7 +105,11 @@ watch(visible, (v) => {
 
 async function handleSubmit() {
   if (!formRef.value) return
-  await formRef.value.validate()
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   const departmentId = form.departmentId
   if (departmentId === undefined) return
   saving.value = true
@@ -116,15 +120,14 @@ async function handleSubmit() {
       employeeNo: form.employeeNo,
       departmentId,
       remark: form.remark,
-      status: form.status,
     }
     if (form.id) await updateEmployee({ id: form.id, ...payload })
-    else await createEmployee(payload)
-    ElMessage.success('操作成功')
+    else await createEmployee({ ...payload, status: form.status })
+    ElMessage.success(form.id ? '已保存' : '已新增')
     visible.value = false
     emit('success')
   } catch (e) {
-    showApiError(e, '操作失败')
+    showApiError(e, '保存失败')
   } finally {
     saving.value = false
   }

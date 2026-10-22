@@ -56,19 +56,6 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 	response.Success(c, "删除成功", nil)
 }
 
-func (h *RoleHandler) RoleDetail(c *gin.Context) {
-	var req types.IDRequest
-	if !bindQuery(c, &req) {
-		return
-	}
-	role, err := h.roleSvc.Get(c.Request.Context(), req.ID)
-	if err != nil {
-		response.WriteError(c, err)
-		return
-	}
-	response.Success(c, "", role)
-}
-
 func (h *RoleHandler) ListRoles(c *gin.Context) {
 	var req types.RoleListRequest
 	if !bindQuery(c, &req) {

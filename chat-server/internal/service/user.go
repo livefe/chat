@@ -27,6 +27,11 @@ type userSessionNotifier interface {
 	RemoveOnlineGeo(ctx context.Context, userID uint)
 }
 
+// userNoticeSender 向用户发送站内系统通知（由客服会话承载）。
+type userNoticeSender interface {
+	NotifyUser(ctx context.Context, userID uint, text string) error
+}
+
 type UserService struct {
 	log              *logger.Logger
 	db               *database.DB
@@ -37,12 +42,15 @@ type UserService struct {
 	convDelRepo      repository.ConversationDeletionRepository
 	blockRepo        repository.UserBlockRepository
 	deactivationRepo repository.UserDeactivationLogRepository
+	punishRepo       repository.UserPunishmentRepository
+	employeeRepo     repository.EmployeeRepository
 	msgRepo          repository.MessageRepository
 	roomRepo         repository.RoomRepository
 	sensitive        *SensitiveWordService
 	deviceSvc        *DeviceService
 	mediaSvc         *MediaService
 	sessions         userSessionNotifier
+	notice           userNoticeSender
 }
 
 func NewUserService(
@@ -55,6 +63,8 @@ func NewUserService(
 	convDelRepo repository.ConversationDeletionRepository,
 	blockRepo repository.UserBlockRepository,
 	deactivationRepo repository.UserDeactivationLogRepository,
+	punishRepo repository.UserPunishmentRepository,
+	employeeRepo repository.EmployeeRepository,
 	msgRepo repository.MessageRepository,
 	roomRepo repository.RoomRepository,
 	mediaSvc *MediaService,
@@ -72,6 +82,8 @@ func NewUserService(
 		convDelRepo:      convDelRepo,
 		blockRepo:        blockRepo,
 		deactivationRepo: deactivationRepo,
+		punishRepo:       punishRepo,
+		employeeRepo:     employeeRepo,
 		msgRepo:          msgRepo,
 		roomRepo:         roomRepo,
 		mediaSvc:         mediaSvc,
@@ -79,6 +91,11 @@ func NewUserService(
 		deviceSvc:        deviceSvc,
 		sessions:         sessions,
 	}
+}
+
+// SetNoticeSender 客服服务依赖用户服务，只能在其构建后注入。
+func (s *UserService) SetNoticeSender(n userNoticeSender) {
+	s.notice = n
 }
 
 func (s *UserService) endSession(ctx context.Context, userID uint) {
@@ -91,9 +108,13 @@ func (s *UserService) endSession(ctx context.Context, userID uint) {
 
 func toUserItem(u *model.User, avatarURL string) types.UserItem {
 	now := time.Now()
+	mobile := ""
+	if !u.DeletedAt.Valid {
+		mobile = utils.DesensitizeMobile(u.Mobile)
+	}
 	return types.UserItem{
 		ID:          u.ID,
-		Mobile:      u.Mobile,
+		Mobile:      mobile,
 		Nickname:    u.Nickname,
 		AvatarURL:   avatarURL,
 		Status:      u.Status,

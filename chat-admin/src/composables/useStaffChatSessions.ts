@@ -1,4 +1,4 @@
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import {
   getImContacts,
@@ -13,38 +13,49 @@ import {
 import { PERM } from '@/constants/permission'
 import { usePermission } from '@/composables/usePermission'
 import { showApiError } from '@/utils/apiError'
+import { usePageVisible } from '@/utils/attention'
 
 const MSG_LIMIT = 30
+const SESSION_PAGE_SIZE = 30
+const CONTACT_PAGE_SIZE = 50
 const SOFT_REFRESH_TOAST_COOLDOWN_MS = 30_000
 
 type StaffChatTab = 'sessions' | 'contacts'
+type LoadOptions = { silent?: boolean; append?: boolean }
+
+export type StaffThreadMessage = ImMessageItem & { sendState?: 'sending' | 'failed' }
 
 export function useStaffChatSessions() {
   const { can } = usePermission()
   const canOpen = computed(() => can(PERM.ImChatOpen))
   const canRead = computed(() => can(PERM.ImChatRead))
+  const pageVisible = usePageVisible()
 
   const sideTab = ref<StaffChatTab>('sessions')
+  const sessionKeyword = ref('')
+  const sessions = ref<ImConversationItem[]>([])
+  const sessionsTotal = ref(0)
+  const sessionsLoading = ref(false)
+  const sessionsLoadingMore = ref(false)
   const contactKeyword = ref('')
   const contacts = ref<ImContactItem[]>([])
+  const contactsTotal = ref(0)
   const contactsLoading = ref(false)
-  const sessions = ref<ImConversationItem[]>([])
-  const sessionsLoading = ref(false)
+  const contactsLoadingMore = ref(false)
   const active = ref<ImConversationItem | null>(null)
-  const messages = ref<ImMessageItem[]>([])
+  const messages = ref<StaffThreadMessage[]>([])
   const messagesLoading = ref(false)
   const loadingMore = ref(false)
   const hasMore = ref(false)
   const threadRef = ref<{ scrollBottom: () => void } | null>(null)
 
   let softRefreshFailToastAt = 0
+  let sessionSeq = 0
+  let messageSeq = 0
 
+  const unreadTotal = computed(() => sessions.value.reduce((n, s) => n + (s.unreadCount || 0), 0))
   const tabs = computed(() => [
-    {
-      key: 'sessions',
-      label: '会话',
-      count: sessions.value.reduce((n, s) => n + (s.unreadCount || 0), 0) || undefined,
-    },
+    { key: 'sessions', label: '会话', count: sessionsTotal.value, unread: unreadTotal.value },
     { key: 'contacts', label: '通讯录' },
   ])
 
@@ -52,31 +63,76 @@ export function useStaffChatSessions() {
     threadRef.value?.scrollBottom()
   }
 
-  async function loadContacts() {
-    contactsLoading.value = true
+  async function loadContacts(opts?: { append?: boolean }) {
+    const append = opts?.append === true
+    if (append) contactsLoadingMore.value = true
+    else contactsLoading.value = true
     try {
+      const page = append ? Math.floor(contacts.value.length / CONTACT_PAGE_SIZE) + 1 : 1
       const { data } = await getImContacts({
-        page: 1,
-        pageSize: 200,
-        keyword: contactKeyword.value.trim() || undefined,
+        page,
+        pageSize: CONTACT_PAGE_SIZE,
+        keyword: contactKeyword.value,
       })
-      contacts.value = data.list || []
+      contactsTotal.value = data.total
+      if (append) {
+        const seen = new Set(contacts.value.map((c) => c.id))
+        contacts.value.push(...(data.list || []).filter((c) => !seen.has(c.id)))
+      } else {
+        contacts.value = data.list || []
+      }
     } catch (e) {
       showApiError(e, '加载通讯录失败')
     } finally {
       contactsLoading.value = false
+      contactsLoadingMore.value = false
     }
   }
 
-  async function loadSessions() {
-    sessionsLoading.value = true
+  /** silent 刷新只替换第一页并原地更新已有条目，不出现加载遮罩。 */
+  async function loadSessions(opts?: LoadOptions) {
+    const silent = opts?.silent === true
+    const append = opts?.append === true
+    const seq = ++sessionSeq
+    if (append) sessionsLoadingMore.value = true
+    else if (!silent) sessionsLoading.value = true
     try {
-      const { data } = await getImConversations({ page: 1, pageSize: 50 })
-      sessions.value = data.list || []
+      const page = append ? Math.floor(sessions.value.length / SESSION_PAGE_SIZE) + 1 : 1
+      const { data } = await getImConversations({
+        page,
+        pageSize: SESSION_PAGE_SIZE,
+        keyword: sessionKeyword.value,
+      })
+      if (seq !== sessionSeq && !append) return
+      const fetched = data.list || []
+      sessionsTotal.value = data.total
+      if (append) {
+        const seen = new Set(sessions.value.map((s) => s.id))
+        sessions.value.push(...fetched.filter((s) => !seen.has(s.id)))
+        return
+      }
+      const byId = new Map(sessions.value.map((s) => [s.id, s]))
+      const head = fetched.map((item) => {
+        const cur = byId.get(item.id)
+        if (!cur) return item
+        Object.assign(cur, item)
+        return cur
+      })
+      const headIds = new Set(head.map((s) => s.id))
+      const tail = silent
+        ? sessions.value.slice(SESSION_PAGE_SIZE).filter((s) => !headIds.has(s.id))
+        : []
+      sessions.value = [...head, ...tail]
+      const cur = active.value
+      if (cur) {
+        const fresh = sessions.value.find((s) => s.id === cur.id)
+        if (fresh && fresh !== cur) active.value = fresh
+      }
     } catch (e) {
-      showApiError(e, '加载会话失败')
+      if (!silent) showApiError(e, '加载会话失败')
     } finally {
-      sessionsLoading.value = false
+      if (append) sessionsLoadingMore.value = false
+      else if (!silent) sessionsLoading.value = false
     }
   }
 
@@ -85,10 +141,10 @@ export function useStaffChatSessions() {
     try {
       const { data } = await openImDM(c.id)
       sideTab.value = 'sessions'
-      await loadSessions()
-      const found = sessions.value.find((s) => s.id === data.id)
-      active.value = found || data
-      await loadMessages(true)
+      sessionKeyword.value = ''
+      await loadSessions({ silent: true })
+      active.value = sessions.value.find((s) => s.id === data.id) || data
+      await loadMessages()
     } catch (e) {
       showApiError(e, '打开会话失败')
     }
@@ -96,46 +152,44 @@ export function useStaffChatSessions() {
 
   async function selectSession(s: ImConversationItem) {
     active.value = s
-    await loadMessages(true)
+    await loadMessages()
   }
 
-  async function loadMessages(reset: boolean) {
+  async function loadMessages() {
     if (!active.value) return
-    if (reset) {
-      messagesLoading.value = true
-      messages.value = []
-      hasMore.value = false
-    }
+    const convId = active.value.id
+    const seq = ++messageSeq
+    messagesLoading.value = true
+    messages.value = []
+    hasMore.value = false
     try {
-      const { data } = await getImMessages({
-        conversationId: active.value.id,
-        limit: MSG_LIMIT,
-      })
+      const { data } = await getImMessages({ conversationId: convId, limit: MSG_LIMIT })
+      if (seq !== messageSeq) return
       messages.value = data.list || []
-      hasMore.value = (data.list || []).length >= MSG_LIMIT
+      hasMore.value = messages.value.length >= MSG_LIMIT
       await nextTick()
       scrollBottom()
       await markRead()
     } catch (e) {
-      showApiError(e, '加载消息失败')
+      if (seq === messageSeq) showApiError(e, '加载消息失败')
     } finally {
-      messagesLoading.value = false
+      if (seq === messageSeq) messagesLoading.value = false
     }
   }
 
   async function loadMore() {
-    if (!active.value || messages.value.length === 0) return
+    const convId = active.value?.id
+    const beforeId = messages.value.find((m) => m.id > 0)?.id
+    if (!convId || !beforeId || loadingMore.value) return
     loadingMore.value = true
     try {
-      const beforeId = messages.value[0]?.id
-      const { data } = await getImMessages({
-        conversationId: active.value.id,
-        beforeId,
-        limit: MSG_LIMIT,
-      })
+      const { data } = await getImMessages({ conversationId: convId, beforeId, limit: MSG_LIMIT })
+      if (active.value?.id !== convId) return
       const older = data.list || []
       hasMore.value = older.length >= MSG_LIMIT
-      messages.value = [...older, ...messages.value]
+      const seen = new Set(messages.value.map((m) => m.id))
+      const fresh = older.filter((m) => !seen.has(m.id))
+      if (fresh.length) messages.value = [...fresh, ...messages.value]
     } catch (e) {
       showApiError(e, '加载失败')
     } finally {
@@ -143,41 +197,45 @@ export function useStaffChatSessions() {
     }
   }
 
+  /** 页面可见时才上报已读，避免后台挂着页面把消息“读掉”。 */
   async function markRead() {
-    if (!active.value || !canRead.value) return
-    const last = messages.value[messages.value.length - 1]
+    const conv = active.value
+    if (!conv || !canRead.value || !pageVisible.value) return
+    const last = [...messages.value].reverse().find((m) => m.id > 0)
     try {
-      await readImConversation({
-        conversationId: active.value.id,
-        lastReadMsgId: last?.id && last.id > 0 ? last.id : undefined,
-      })
-      const s = sessions.value.find((x) => x.id === active.value?.id)
-      if (s) s.unreadCount = 0
+      await readImConversation({ conversationId: conv.id, lastReadMsgId: last?.id })
+      conv.unreadCount = 0
     } catch {
       return
     }
   }
 
   async function softRefreshMessages() {
-    if (!active.value) return
+    if (!active.value || messagesLoading.value) return
     const convId = active.value.id
     try {
-      const { data } = await getImMessages({
-        conversationId: convId,
-        limit: MSG_LIMIT,
-      })
-      const list = data.list || []
+      const { data } = await getImMessages({ conversationId: convId, limit: MSG_LIMIT })
       if (active.value?.id !== convId) return
-      const prevIds = new Set(messages.value.map((m) => m.id))
+      const byId = new Map(messages.value.map((m) => [m.id, m]))
       let added = false
-      for (const m of list) {
-        if (m.id > 0 && !prevIds.has(m.id)) {
-          messages.value.push(m)
-          added = true
+      for (const m of data.list || []) {
+        const cur = byId.get(m.id)
+        if (cur) {
+          if (m.recalled && !cur.recalled) {
+            cur.recalled = true
+            cur.content = ''
+          }
+          continue
         }
+        const pendingIdx = m.clientMsgId
+          ? messages.value.findIndex((x) => x.id <= 0 && x.clientMsgId === m.clientMsgId)
+          : -1
+        if (pendingIdx >= 0) messages.value[pendingIdx] = m
+        else messages.value.push(m)
+        added = true
       }
       if (added) {
-        messages.value.sort((a, b) => a.id - b.id)
+        messages.value.sort((a, b) => (a.id > 0 ? a.id : Infinity) - (b.id > 0 ? b.id : Infinity))
         await nextTick()
         scrollBottom()
         await markRead()
@@ -191,15 +249,25 @@ export function useStaffChatSessions() {
     }
   }
 
+  watch(pageVisible, (v) => {
+    if (v && active.value && messages.value.length) void markRead()
+  })
+
   return {
     canOpen,
     sideTab,
     tabs,
+    unreadTotal,
+    sessionKeyword,
+    sessions,
+    sessionsTotal,
+    sessionsLoading,
+    sessionsLoadingMore,
     contactKeyword,
     contacts,
+    contactsTotal,
     contactsLoading,
-    sessions,
-    sessionsLoading,
+    contactsLoadingMore,
     active,
     messages,
     messagesLoading,

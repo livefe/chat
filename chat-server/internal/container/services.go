@@ -53,8 +53,8 @@ func buildServices(in *Infra, r *Repos) (*Services, error) {
 		return nil, fmt.Errorf("媒体服务初始化失败: %w", err)
 	}
 
-	sensitiveWordSvc := service.NewSensitiveWordService(in.Log, r.SensitiveWord)
-	if err := sensitiveWordSvc.Load(context.Background()); err != nil {
+	sensitiveWordSvc := service.NewSensitiveWordService(in.Log, in.DB, in.Cache, in.InstanceID, r.SensitiveWord)
+	if err := sensitiveWordSvc.Start(context.Background()); err != nil {
 		return nil, fmt.Errorf("敏感词加载失败: %w", err)
 	}
 
@@ -73,21 +73,22 @@ func buildServices(in *Infra, r *Repos) (*Services, error) {
 	}
 	userSvc := service.NewUserService(
 		in.Log, in.DB, authSvc, smsSvc,
-		userStore, r.UserLoginRecord, r.ConversationDeletion, r.UserBlock, r.UserDeactivationLog, r.Message, r.Room,
+		userStore, r.UserLoginRecord, r.ConversationDeletion, r.UserBlock, r.UserDeactivationLog,
+		r.UserPunishment, r.Employee, r.Message, r.Room,
 		mediaSvc, sensitiveWordSvc, deviceSvc, chatHub,
 	)
 
 	permSvc := service.NewPermissionService(in.Log, in.Cache, in.DB, r.Permission, r.Role, r.EmployeeRole, r.RolePermission)
 	roleSvc := service.NewRoleService(in.Log, in.DB, r.Role, r.EmployeeRole, r.RolePermission, r.Permission, permSvc)
 	departmentSvc := service.NewDepartmentService(in.Log, r.Employee, r.Department)
-	employeeSvc := service.NewEmployeeService(in.Log, authSvc, permSvc, r.Employee, r.EmployeeRole, r.Role, r.Department)
+	employeeSvc := service.NewEmployeeService(in.Log, authSvc, permSvc, r.Employee, r.EmployeeRole, r.EmployeeLoginRecord, r.Role, r.Department)
 
 	configSvc := service.NewConfigService(in.Log, in.Cache, r.Config)
 	adSvc := service.NewAdService(in.Log, in.DB, in.Cfg.Ad, configSvc, r.AdCampaign, r.AdEvent, r.AdDailyStat, r.Post, r.Room, mediaSvc)
 
-	roomSvc := service.NewRoomService(in.Log, in.Cache, r.Room, presenceSvc, sensitiveWordSvc, chatHub)
+	roomSvc := service.NewRoomService(in.Log, in.Cache, r.Room, r.Employee, userSvc, presenceSvc, sensitiveWordSvc, chatHub)
 	postSvc := service.NewPostService(
-		in.Log, in.Cache, r.Post, r.PostExtra, r.PostSignup, r.Message, userSvc, roomSvc,
+		in.Log, in.Cache, r.Post, r.PostExtra, r.PostSignup, r.Message, r.Employee, userSvc, roomSvc,
 		mediaSvc, sensitiveWordSvc, adSvc, chatHub,
 	)
 
@@ -115,6 +116,7 @@ func buildServices(in *Infra, r *Repos) (*Services, error) {
 		in.Log, in.Cache, in.DB, r.IMSupportState, r.IMSupportConfig,
 		userStore, r.Employee, imSvc, imHub, chatHub, permSvc,
 	)
+	userSvc.SetNoticeSender(supportSvc)
 
 	opsSvc := service.NewOpsService(in.Log, permSvc, imSvc, supportSvc, reportSvc, feedbackSvc, roomSvc, postSvc)
 

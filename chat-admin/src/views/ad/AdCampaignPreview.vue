@@ -6,6 +6,7 @@
       <div v-else class="preview-image placeholder">封面</div>
       <div class="preview-text">
         <div class="preview-ad-title">{{ title || '广告标题' }}</div>
+        <div v-if="subtitle" class="preview-ad-subtitle">{{ subtitle }}</div>
         <div class="preview-ad-meta">
           <span class="preview-ad-name">{{ advertiserName || '广告主' }}</span>
           <span class="preview-ad-badge" title="信息流须显著标明广告">广告</span>
@@ -19,6 +20,7 @@
 defineProps<{
   imageUrl: string
   title: string
+  subtitle: string
   advertiserName: string
 }>()
 </script>
@@ -58,6 +60,12 @@ defineProps<{
   font-weight: 600;
   font-size: 14px;
   line-height: 1.4;
+}
+.preview-ad-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
 }
 .preview-ad-meta {
   display: flex;

@@ -72,13 +72,25 @@ func (s *OpsService) PendingCounts(ctx context.Context, employeeID uint) (*types
 		}()
 	}
 
-	run(codes["im:chat"], func() (int64, error) {
-		sum, err := s.imSvc.UnreadSummary(ctx, employeeID)
-		if err != nil || sum == nil {
-			return 0, err
-		}
-		return sum.Total, nil
-	}, func(n int64) { out.IMUnread = n })
+	if codes["im:chat"] || codes["im:support"] {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sum, err := s.imSvc.UnreadSummary(ctx, employeeID)
+			if err != nil || sum == nil {
+				s.log.Warn(ctx, "pending count failed", logger.Error(err))
+				return
+			}
+			mu.Lock()
+			if codes["im:chat"] {
+				out.IMUnread = sum.Total
+			}
+			if codes["im:support"] {
+				out.SupportUnread = sum.SupportTotal
+			}
+			mu.Unlock()
+		}()
+	}
 
 	run(codes["im:support"] || codes["im:support_overview"], func() (int64, error) {
 		return s.supportSvc.CountQueue(ctx)

@@ -8,6 +8,7 @@ export interface RoleItem {
   description: string
   status: number
   statusText: string
+  memberCount: number
   createdAt: string
   updatedAt: string
 }

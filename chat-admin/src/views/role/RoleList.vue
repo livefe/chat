@@ -12,6 +12,7 @@
 
       <RoleFilter
         v-model:name="query.name"
+        v-model:code="query.code"
         v-model:status="query.status"
         @search="handleSearch"
         @reset="handleReset"
@@ -20,11 +21,13 @@
       <RoleTable
         :list="list"
         :loading="loading"
+        :error="error"
         :total="total"
         v-model:page="query.page"
         v-model:page-size="query.pageSize"
         @edit="handleEdit"
         @permissions="openPermissions"
+        @members="openMembers"
         @delete="handleDelete"
         @page-change="fetchList"
       />
@@ -37,25 +40,39 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { deleteRole, getRoleList, type RoleItem } from '@/api/role'
-import { usePaginatedList } from '@/composables/usePaginatedList'
+import { useListQuery } from '@/composables/useListQuery'
+import { usePermission } from '@/composables/usePermission'
+import { DEFAULT_PAGE_SIZE } from '@/constants'
+import { PERM } from '@/constants/permission'
+import { useEmployeeStore } from '@/stores/employee'
 import { confirmAndRun } from '@/utils/confirm'
+import { pushMenuRoute } from '@/utils/navigation'
 import RoleFilter from './RoleFilter.vue'
 import RoleTable from './RoleTable.vue'
 import RoleFormDialog, { type RoleFormModel } from './RoleFormDialog.vue'
 import RolePermissionDialog from './RolePermissionDialog.vue'
-import { PERM } from '@/constants/permission'
-import { usePermission } from '@/composables/usePermission'
 
 const { can } = usePermission()
 const route = useRoute()
-const { loading, list, total, query, fetchList, handleSearch, handleReset } = usePaginatedList(
-  getRoleList,
-  { page: 1, pageSize: 10, name: '', status: undefined as number | undefined },
-  '获取角色列表失败',
-)
+const router = useRouter()
+const employeeStore = useEmployeeStore()
+
+const { loading, error, list, total, query, fetchList, handleSearch, handleReset, afterRemove } =
+  useListQuery({
+    fetch: (q) => getRoleList(q),
+    defaults: {
+      page: 1,
+      pageSize: DEFAULT_PAGE_SIZE,
+      name: '',
+      code: '',
+      status: undefined as number | undefined,
+    },
+    schema: { name: 'string', code: 'string', status: 'number' },
+    errorMessage: '获取角色列表失败',
+  })
 
 const formVisible = ref(false)
 const form = reactive<RoleFormModel>({ id: 0, name: '', code: '', description: '', status: 1 })
@@ -83,16 +100,22 @@ function openPermissions(row: RoleItem) {
   permVisible.value = true
 }
 
-async function handleDelete(row: RoleItem) {
-  await confirmAndRun(
-    '确定要删除该角色吗？',
-    async () => {
-      await deleteRole(row.id)
-      fetchList()
-    },
-    '删除成功',
-  )
+function openMembers(row: RoleItem) {
+  pushMenuRoute(router, employeeStore.permissions, PERM.OrgEmployee, { roleId: String(row.id) })
 }
 
-onMounted(fetchList)
+async function handleDelete(row: RoleItem) {
+  const impact =
+    row.memberCount > 0
+      ? `该角色当前有 ${row.memberCount} 名员工，删除后他们将失去此角色带来的全部权限。`
+      : '该角色当前没有员工。'
+  await confirmAndRun(
+    `确定删除角色「${row.name}」吗？${impact}此操作不可恢复。`,
+    async () => {
+      await deleteRole(row.id)
+      await afterRemove()
+    },
+    '已删除',
+  )
+}
 </script>

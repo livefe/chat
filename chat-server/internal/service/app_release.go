@@ -71,12 +71,8 @@ func (s *AppReleaseService) ListCurrent(ctx context.Context) (*types.AppReleaseP
 	return &types.AppReleasePublicResponse{List: items}, nil
 }
 
-func (s *AppReleaseService) AdminList(ctx context.Context, platform string) (*types.AppReleaseListResponse, error) {
-	platform = strings.TrimSpace(platform)
-	if platform != "" && !validPlatform(platform) {
-		return nil, errs.Invalid("平台不正确")
-	}
-	list, err := s.appReleaseRepo.List(ctx, platform)
+func (s *AppReleaseService) AdminList(ctx context.Context, req *types.AppReleaseAdminListRequest) (*types.AppReleaseListResponse, error) {
+	list, total, err := s.appReleaseRepo.List(ctx, req.Platform, req.Page, req.PageSize)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
@@ -84,7 +80,7 @@ func (s *AppReleaseService) AdminList(ctx context.Context, platform string) (*ty
 	for _, row := range list {
 		items = append(items, toAppReleaseItem(row))
 	}
-	return &types.AppReleaseListResponse{List: items}, nil
+	return &types.AppReleaseListResponse{Total: total, List: items}, nil
 }
 
 func (s *AppReleaseService) AdminUpload(ctx context.Context, platform, version, changelog, filename string, reader io.Reader, size int64) (*types.AppReleaseItem, error) {
@@ -100,9 +96,9 @@ func (s *AppReleaseService) AdminUpload(ctx context.Context, platform, version, 
 	if !utils.ValidSemver(version) {
 		return nil, errs.Invalid("版本号格式不正确，需为 x.y.z")
 	}
-	ext := packageExt(filename)
-	if ext == "" {
-		return nil, errs.Invalid("无法识别安装包后缀")
+	ext := packageExtFor(platform)
+	if strings.ToLower(path.Ext(filename)) != ext {
+		return nil, errs.Invalid(fmt.Sprintf("%s 安装包须为 %s 文件", platformLabel(platform), ext))
 	}
 
 	exist, err := s.appReleaseRepo.GetByPlatformVersion(ctx, platform, version)
@@ -232,6 +228,34 @@ func (s *AppReleaseService) AdminUnsetCurrent(ctx context.Context, id uint) erro
 	return nil
 }
 
+// AdminDelete 删除误传或作废的非当前版本，安装包文件一并从存储中删除。
+func (s *AppReleaseService) AdminDelete(ctx context.Context, id uint) error {
+	row, err := s.appReleaseRepo.GetByID(ctx, id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errs.NotFound("记录不存在")
+	}
+	if err != nil {
+		return fmt.Errorf("查询失败: %w", err)
+	}
+	if row.IsCurrent == 1 {
+		return errs.Invalid("当前对外版本不能删除，请先下架或切换到其他版本")
+	}
+	if err := s.appReleaseRepo.DeleteNotCurrent(ctx, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errs.Invalid("该版本已是当前对外版本或已被删除")
+		}
+		s.log.Error(ctx, "删除版本记录失败", logger.Error(err))
+		return fmt.Errorf("删除失败，请稍后重试: %w", err)
+	}
+	if row.Platform != repository.AppPlatformH5 {
+		objectKey := path.Join(appObjectDir, row.Platform+"-"+row.Version+packageExtFor(row.Platform))
+		if err := s.store.Delete(ctx, objectKey); err != nil {
+			s.log.Warn(ctx, "删除安装包文件失败", logger.String("key", objectKey), logger.Error(err))
+		}
+	}
+	return nil
+}
+
 func validPlatform(platform string) bool {
 	_, ok := platformText[platform]
 	return ok
@@ -244,14 +268,11 @@ func platformLabel(platform string) string {
 	return platform
 }
 
-func packageExt(filename string) string {
-	ext := strings.ToLower(path.Ext(filename))
-	switch ext {
-	case ".apk", ".aab", ".ipa", ".dmg", ".zip":
-		return ext
-	default:
-		return ""
+func packageExtFor(platform string) string {
+	if platform == repository.AppPlatformIOS {
+		return ".ipa"
 	}
+	return ".apk"
 }
 
 const packageMaxSizeMB = 100

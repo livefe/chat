@@ -1,10 +1,5 @@
 package types
 
-type DepartmentListRequest struct {
-	Name   string `form:"name"`
-	Status *uint8 `form:"status"`
-}
-
 type DepartmentItem struct {
 	ID            uint   `json:"id"`
 	ParentID      uint   `json:"parentId"`
@@ -17,8 +12,10 @@ type DepartmentItem struct {
 	Status        uint8  `json:"status"`
 	StatusText    string `json:"statusText"`
 	EmployeeCount int64  `json:"employeeCount"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
+	// 含全部下级部门的员工数
+	TotalEmployeeCount int64  `json:"totalEmployeeCount"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
 }
 
 type DepartmentTreeItem struct {

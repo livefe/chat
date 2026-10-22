@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"app/internal/model"
 	"app/internal/repository"
@@ -20,16 +21,25 @@ var messageScopeText = map[uint8]string{
 	model.MessageScopeNearby:  "附近",
 	model.MessageScopeRoom:    "聊天区",
 	model.MessageScopePrivate: "私聊",
-	model.MessageScopePost:    "动态讨论",
+	model.MessageScopePost:    "帖子讨论",
 }
 
+const (
+	// adminKeywordDefaultWindow 仅按关键词搜索时默认的时间窗口，避免全表 LIKE。
+	adminKeywordDefaultWindow = 7 * 24 * time.Hour
+	// adminNearbyContextRadius 附近消息上下文的取样半径（米）。
+	adminNearbyContextRadius = 3000.0
+)
+
 func (s *MessageService) AdminList(ctx context.Context, req *types.AdminMessageListRequest) (*types.AdminMessageListResponse, error) {
-	if req.Keyword != "" && req.UserID == 0 && req.PeerUserID == 0 && req.RoomID == 0 && req.PostID == 0 && req.StartTime == "" {
-		return nil, errs.Invalid("关键词搜索请指定范围或时间")
+	startTime := req.StartTime
+	scoped := req.ID > 0 || req.UserID > 0 || req.PeerUserID > 0 || req.RoomID > 0 || req.PostID > 0
+	if req.Keyword != "" && !scoped && startTime == "" {
+		startTime = time.Now().Add(-adminKeywordDefaultWindow).Format(time.DateTime)
 	}
 	list, total, err := s.msgRepo.List(ctx, repository.MessageListFilter{
-		UserID: req.UserID, PeerUserID: req.PeerUserID, RoomID: req.RoomID, PostID: req.PostID, Scope: req.Scope,
-		Keyword: req.Keyword, StartTime: req.StartTime, EndTime: req.EndTime,
+		ID: req.ID, UserID: req.UserID, PeerUserID: req.PeerUserID, RoomID: req.RoomID, PostID: req.PostID,
+		Scope: req.Scope, Keyword: req.Keyword, StartTime: startTime, EndTime: req.EndTime,
 		Page: req.Page, PageSize: req.PageSize,
 	})
 	if err != nil {
@@ -46,15 +56,20 @@ func (s *MessageService) AdminList(ctx context.Context, req *types.AdminMessageL
 	}, nil
 }
 
-func (s *MessageService) AdminGetContext(ctx context.Context, id uint, limit int) ([]types.AdminMessageItem, error) {
-	msg, err := s.msgRepo.GetByIDUnscoped(ctx, id)
+func (s *MessageService) AdminGetContext(ctx context.Context, req *types.AdminMessageContextRequest) ([]types.AdminMessageItem, error) {
+	msg, err := s.msgRepo.GetByIDUnscoped(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errs.NotFound("消息不存在")
 		}
 		return nil, fmt.Errorf("查询消息失败: %w", err)
 	}
-	list, err := s.msgRepo.ListAroundID(ctx, msg, limit)
+	var nearby *repository.GeoBox
+	if msg.Scope == model.MessageScopeNearby && (msg.Latitude != 0 || msg.Longitude != 0) {
+		box := geoBoxAround(msg.Latitude, msg.Longitude, adminNearbyContextRadius)
+		nearby = &box
+	}
+	list, err := s.msgRepo.ListContext(ctx, msg, nearby, req.BeforeID, req.AfterID, req.Limit)
 	if err != nil {
 		s.log.Error(ctx, "查询消息上下文失败", logger.Error(err))
 		return nil, fmt.Errorf("查询消息上下文失败: %w", err)
@@ -62,7 +77,41 @@ func (s *MessageService) AdminGetContext(ctx context.Context, id uint, limit int
 	return s.toAdminMessageItems(ctx, list)
 }
 
-func (s *MessageService) AdminDelete(ctx context.Context, id uint) error {
+// AdminDeleteMessages 批量删除并按需禁言发送者；已删除的消息计入跳过。
+func (s *MessageService) AdminDeleteMessages(ctx context.Context, employeeID uint, req *types.AdminMessageDeleteRequest) (*types.AdminMessageDeleteResult, error) {
+	ids := uniqueNonZeroIDs(req.IDs)
+	msgs, err := s.msgRepo.GetByIDsUnscoped(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("查询消息失败: %w", err)
+	}
+	result := &types.AdminMessageDeleteResult{Skipped: len(ids) - len(msgs)}
+	senders := make([]uint, 0, len(msgs))
+	for _, msg := range msgs {
+		deleted, err := s.deleteWithRecord(ctx, msg, PunishMeta{EmployeeID: employeeID, Reason: req.Reason})
+		if err != nil {
+			return nil, err
+		}
+		if !deleted {
+			result.Skipped++
+			continue
+		}
+		result.Deleted++
+		senders = append(senders, msg.FromUserID)
+	}
+	if req.MuteDuration != 0 && len(senders) > 0 {
+		muted, err := s.userSvc.AdminBatchMute(ctx, &types.BatchUserMuteRequest{
+			IDs: senders, Duration: req.MuteDuration, Reason: req.Reason,
+		}, PunishMeta{EmployeeID: employeeID, Reason: req.Reason})
+		if err != nil {
+			return nil, err
+		}
+		result.Muted = muted.Updated
+	}
+	return result, nil
+}
+
+// DeleteForReport 举报处置删除消息；消息已被删除时视为成功。
+func (s *MessageService) DeleteForReport(ctx context.Context, id uint, meta PunishMeta) error {
 	msg, err := s.msgRepo.GetByIDUnscoped(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -70,22 +119,30 @@ func (s *MessageService) AdminDelete(ctx context.Context, id uint) error {
 		}
 		return fmt.Errorf("查询消息失败: %w", err)
 	}
+	_, err = s.deleteWithRecord(ctx, msg, meta)
+	return err
+}
+
+func (s *MessageService) deleteWithRecord(ctx context.Context, msg *model.Message, meta PunishMeta) (bool, error) {
 	if msg.DeletedAt.Valid {
-		return errs.Conflict("消息已删除")
+		return false, nil
 	}
+	meta.TargetID = msg.ID
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
 		if err := s.msgRepo.Delete(ctx, msg.ID); err != nil {
 			return err
 		}
 		if msg.Scope == model.MessageScopePost && msg.PostID > 0 && msg.Recalled == 0 {
-			return s.postSvc.DecrDiscussMessageCount(ctx, msg.PostID)
+			if err := s.postSvc.DecrDiscussMessageCount(ctx, msg.PostID); err != nil {
+				return err
+			}
 		}
-		return nil
+		return s.userSvc.RecordContentPunishment(ctx, msg.FromUserID, model.PunishActionDeleteMessage, meta)
 	}); err != nil {
-		s.log.Error(ctx, "删除消息失败", logger.Uint("message_id", id), logger.Error(err))
-		return fmt.Errorf("删除消息失败: %w", err)
+		s.log.Error(ctx, "删除消息失败", logger.Uint("message_id", msg.ID), logger.Error(err))
+		return false, fmt.Errorf("删除消息失败: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 type adminMessageRefs struct {
@@ -216,6 +273,9 @@ func toAdminMessageItem(m *model.Message, profiles map[uint]types.UserProfile, r
 		ScopeText:   utils.TextOf(messageScopeText, m.Scope),
 		RoomName:    roomNames[m.RoomID],
 	}
+	if ok {
+		item.FromMobile = utils.DesensitizeMobile(p.Mobile)
+	}
 	item.Content = hydrateMessageContent(m.ContentType, m.Content, urlMap)
 	if m.ReplyToID > 0 {
 		fillAdminReplyQuote(&item, replyMap[m.ReplyToID], profiles, urlMap)
@@ -226,6 +286,7 @@ func toAdminMessageItem(m *model.Message, profiles map[uint]types.UserProfile, r
 	}
 	if p, ok := profiles[m.ToUserID]; ok {
 		item.ToName = utils.DisplayName(p.Nickname)
+		item.ToMobile = utils.DesensitizeMobile(p.Mobile)
 	} else if m.ToUserID > 0 {
 		item.ToName = deactivatedDisplayName()
 	}

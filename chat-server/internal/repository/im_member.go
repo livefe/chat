@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"app/internal/model"
 	"app/pkg/database"
@@ -21,7 +22,7 @@ type IMMemberRepository interface {
 	UpdateRead(ctx context.Context, conversationID uint, kind uint8, principalID, lastReadMsgID uint) error
 	Leave(ctx context.Context, conversationID uint, kind uint8, principalID uint, leftAt int64) error
 	Reactivate(ctx context.Context, conversationID uint, kind uint8, principalID uint, role uint8, joinedAt int64) error
-	ListConversationsByEmployee(ctx context.Context, employeeID uint, page, pageSize int) ([]IMConversationRow, int64, error)
+	ListConversationsByEmployee(ctx context.Context, employeeID uint, keyword string, page, pageSize int) ([]IMConversationRow, int64, error)
 }
 
 type imMemberRepository struct {
@@ -93,7 +94,7 @@ func (r *imMemberRepository) Reactivate(ctx context.Context, conversationID uint
 	}})
 }
 
-func (r *imMemberRepository) ListConversationsByEmployee(ctx context.Context, employeeID uint, page, pageSize int) ([]IMConversationRow, int64, error) {
+func (r *imMemberRepository) ListConversationsByEmployee(ctx context.Context, employeeID uint, keyword string, page, pageSize int) ([]IMConversationRow, int64, error) {
 	base := database.Conn(ctx, r.db).Table("im_conversation AS c").
 		Joins(`INNER JOIN im_member AS m ON m.conversation_id = c.id AND m.principal_kind = ? AND m.principal_id = ? AND m.left_at = 0 AND m.deleted_at IS NULL`,
 			model.IMPrincipalEmployee, employeeID).
@@ -101,6 +102,10 @@ func (r *imMemberRepository) ListConversationsByEmployee(ctx context.Context, em
 			model.IMPrincipalEmployee, employeeID).
 		Where("c.deleted_at IS NULL").
 		Where("c.type = ?", model.IMConvTypeStaffDM)
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		base = base.Joins("LEFT JOIN employee AS pe ON pe.id = peer.principal_id").
+			Where("(pe.name LIKE ? OR c.title LIKE ?)", "%"+kw+"%", "%"+kw+"%")
+	}
 
 	var total int64
 	if err := base.Count(&total).Error; err != nil {

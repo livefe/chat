@@ -20,8 +20,10 @@
       <DepartmentTable
         :data="displayTree"
         :loading="loading"
+        :error="loadError"
         :expand-all="isFiltering"
         :table-key="tableKey"
+        @retry="fetchList()"
         @detail="openDetail"
         @add-child="(row) => formRef?.openCreate(row)"
         @edit="(row) => formRef?.openEdit(row)"
@@ -63,6 +65,7 @@ const employeeStore = useEmployeeStore()
 const { can } = usePermission()
 
 const loading = ref(false)
+const loadError = ref(false)
 const allTree = ref<DepartmentItem[]>([])
 const selected = ref<DepartmentItem | null>(null)
 const detailVisible = ref(false)
@@ -116,6 +119,7 @@ function findNode(nodes: DepartmentItem[], id: number): DepartmentItem | null {
 
 async function fetchList(preferId?: number) {
   loading.value = true
+  loadError.value = false
   try {
     const { data } = await getDepartmentList()
     allTree.value = data.list || []
@@ -124,6 +128,8 @@ async function fetchList(preferId?: number) {
       selected.value = findNode(allTree.value, keepId)
     }
   } catch (e) {
+    allTree.value = []
+    loadError.value = true
     showApiError(e, '获取部门列表失败')
   } finally {
     loading.value = false
@@ -163,10 +169,18 @@ async function handleToggleStatus(row: DepartmentItem) {
     ElMessage.warning('请先处理下级部门后再禁用')
     return
   }
-  await confirmAndRun(`确定要${next === 1 ? '启用' : '禁用'}部门「${row.name}」吗？`, async () => {
-    await updateDepartmentStatus(row.id, next)
-    await fetchList(row.id)
-  })
+  const message =
+    next === 1
+      ? `确定启用部门「${row.name}」吗？`
+      : `确定禁用部门「${row.name}」吗？禁用后新增或编辑员工时将不能再选择该部门。`
+  await confirmAndRun(
+    message,
+    async () => {
+      await updateDepartmentStatus(row.id, next)
+      await fetchList(row.id)
+    },
+    next === 1 ? '已启用' : '已禁用',
+  )
 }
 
 onMounted(() => fetchList())

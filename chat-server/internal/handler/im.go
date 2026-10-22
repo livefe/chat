@@ -125,11 +125,11 @@ func (h *IMHandler) OpenDM(c *gin.Context) {
 }
 
 func (h *IMHandler) Conversations(c *gin.Context) {
-	var req types.PageQuery
+	var req types.IMConversationQuery
 	if !bindQuery(c, &req) {
 		return
 	}
-	result, err := h.imSvc.ListConversations(c.Request.Context(), middleware.CurrentEmployeeID(c), req.Page, req.PageSize)
+	result, err := h.imSvc.ListConversations(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
 	if err != nil {
 		response.WriteError(c, err)
 		return

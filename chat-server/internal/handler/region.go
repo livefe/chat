@@ -44,6 +44,19 @@ func (h *RegionHandler) Search(c *gin.Context) {
 	response.Success(c, "", result)
 }
 
+func (h *RegionHandler) AdminTrail(c *gin.Context) {
+	var req types.RegionDetailRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.regionSvc.Trail(c.Request.Context(), req.Code)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
 func (h *RegionHandler) Detail(c *gin.Context) {
 	var req types.RegionDetailRequest
 	if !bindQuery(c, &req) {

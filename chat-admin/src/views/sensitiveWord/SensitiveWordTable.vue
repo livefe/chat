@@ -1,17 +1,26 @@
 <template>
-  <el-table :data="list" v-loading="loading" empty-text="暂无屏蔽词">
+  <el-table
+    ref="tableRef"
+    :data="list"
+    v-loading="loading"
+    row-key="id"
+    @selection-change="(rows: SensitiveWordItem[]) => emit('selection-change', rows)"
+  >
+    <template #empty>
+      <TableEmpty :error="error" text="暂无屏蔽词" @retry="emit('page-change')" />
+    </template>
+    <el-table-column v-if="selectable" type="selection" width="44" />
     <el-table-column prop="id" label="ID" width="80" />
     <el-table-column prop="word" label="屏蔽词" min-width="140" />
     <el-table-column prop="categoryText" label="分类" width="100" />
-    <el-table-column prop="levelText" label="等级" width="80" />
-    <el-table-column label="状态" width="100">
+    <el-table-column label="状态" width="90">
       <template #default="{ row }">
-        <el-tag :type="row.status === 1 ? 'success' : 'danger'">{{ row.statusText }}</el-tag>
+        <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ row.statusText }}</el-tag>
       </template>
     </el-table-column>
     <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-    <el-table-column prop="updatedAt" label="更新时间" width="180" />
-    <el-table-column label="操作" width="220" fixed="right">
+    <el-table-column prop="updatedAt" label="更新时间" width="170" />
+    <el-table-column label="操作" width="160" fixed="right">
       <template #default="{ row }">
         <div class="action-cell">
           <el-button
@@ -27,7 +36,7 @@
             v-if="can(PERM.OpsSensitiveWordStatus)"
             size="small"
             link
-            :type="row.status === 1 ? 'danger' : 'success'"
+            :type="row.status === 1 ? 'warning' : 'success'"
             @click="emit('toggle-status', row as SensitiveWordItem)"
           >
             {{ row.status === 1 ? '停用' : '启用' }}
@@ -60,7 +69,10 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import type { TableInstance } from 'element-plus'
 import type { SensitiveWordItem } from '@/api/sensitiveWord'
+import TableEmpty from '@/components/common/TableEmpty.vue'
 import { usePermission } from '@/composables/usePermission'
 import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
 import { PERM } from '@/constants/permission'
@@ -68,13 +80,16 @@ import { PERM } from '@/constants/permission'
 defineProps<{
   list: SensitiveWordItem[]
   loading: boolean
+  error?: boolean
   total: number
+  selectable: boolean
 }>()
 
 const page = defineModel<number>('page', { required: true })
 const pageSize = defineModel<number>('pageSize', { required: true })
 
 const emit = defineEmits<{
+  'selection-change': [rows: SensitiveWordItem[]]
   edit: [row: SensitiveWordItem]
   'toggle-status': [row: SensitiveWordItem]
   delete: [row: SensitiveWordItem]
@@ -82,4 +97,9 @@ const emit = defineEmits<{
 }>()
 
 const { can } = usePermission()
+const tableRef = ref<TableInstance>()
+
+defineExpose({
+  clearSelection: () => tableRef.value?.clearSelection(),
+})
 </script>

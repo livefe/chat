@@ -1,4 +1,4 @@
-import { computed, reactive, ref, type Ref } from 'vue'
+import { computed, onUnmounted, reactive, ref, type Ref } from 'vue'
 
 import type { SupportAdminSession } from '@/api/support'
 import { showApiError } from '@/utils/apiError'
@@ -12,71 +12,44 @@ export function supportSessionTitle(s: SupportAdminSession) {
   return s.userNickname || s.userMobile || `用户#${s.userId}`
 }
 
-function sameSessionList(a: SupportAdminSession[], b: SupportAdminSession[]) {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    const left = a[i]
-    const right = b[i]
-    if (!left || !right || left.id !== right.id) return false
-  }
-  return true
+/** 每秒刷新的当前时间（秒），用于实时计算排队等待时长。 */
+export function useNowSec() {
+  const now = ref(Math.floor(Date.now() / 1000))
+  const timer = window.setInterval(() => {
+    now.value = Math.floor(Date.now() / 1000)
+  }, 1000)
+  onUnmounted(() => window.clearInterval(timer))
+  return now
 }
 
-function mergeSessionFields(target: SupportAdminSession[], list: SupportAdminSession[]) {
-  list.forEach((item, i) => {
-    const cur = target[i]
-    if (!cur) return
-    cur.queueWaitSec = item.queueWaitSec
-    cur.lastContent = item.lastContent
-    cur.lastActiveAt = item.lastActiveAt
-    cur.unreadCount = item.unreadCount
-    cur.status = item.status
-    cur.statusText = item.statusText
-    cur.closeAt = item.closeAt
-    cur.assigneeEmployeeId = item.assigneeEmployeeId
-    cur.assigneeName = item.assigneeName
-  })
+export function supportWaitSec(s: SupportAdminSession, now: number) {
+  return s.queueAt > 0 ? Math.max(0, now - s.queueAt) : 0
+}
+
+function sameSessionIds(a: SupportAdminSession[], b: SupportAdminSession[]) {
+  return a.length === b.length && a.every((x, i) => x.id === b[i]?.id)
 }
 
 function applySessionPatch(cur: SupportAdminSession, item: SupportAdminSession) {
-  cur.queueWaitSec = item.queueWaitSec
-  cur.lastContent = item.lastContent
-  cur.lastActiveAt = item.lastActiveAt
-  cur.unreadCount = item.unreadCount
-  cur.status = item.status
-  cur.statusText = item.statusText
-  cur.closeAt = item.closeAt
-  cur.userNickname = item.userNickname
-  cur.userMobile = item.userMobile
-  cur.userAvatarUrl = item.userAvatarUrl
-  cur.assigneeEmployeeId = item.assigneeEmployeeId
-  cur.assigneeName = item.assigneeName
+  Object.assign(cur, item)
 }
 
+/** 静默刷新只替换第一页：已有对象原地更新，保留已经“加载更多”出来的尾部。 */
 function softMergeSessions(
   current: SupportAdminSession[],
   page1: SupportAdminSession[],
 ): SupportAdminSession[] {
-  if (current.length <= SUPPORT_PAGE_SIZE) {
-    return page1
-  }
   const byId = new Map(current.map((x) => [x.id, x]))
+  const head = page1.map((item) => {
+    const cur = byId.get(item.id)
+    if (!cur) return item
+    applySessionPatch(cur, item)
+    return cur
+  })
+  if (current.length <= SUPPORT_PAGE_SIZE) return head
   const page1Ids = new Set(page1.map((x) => x.id))
   const oldTopIds = new Set(current.slice(0, SUPPORT_PAGE_SIZE).map((x) => x.id))
-
-  const head: SupportAdminSession[] = []
-  for (const item of page1) {
-    const cur = byId.get(item.id)
-    if (cur) {
-      applySessionPatch(cur, item)
-      head.push(cur)
-    } else {
-      head.push(item)
-    }
-  }
-
   const tail = current.filter((x) => !page1Ids.has(x.id) && !oldTopIds.has(x.id))
-
   return [...head, ...tail]
 }
 
@@ -94,7 +67,6 @@ export function reselectActiveSession(
 export function useSupportSessionList(options: {
   fetch: (params: { page: number; pageSize: number }) => Promise<SessionPage>
   errorText: string
-  mode: 'merge' | 'replace'
   onReplaced?: (list: SupportAdminSession[]) => void
   onFetched?: (page: SupportAdminSession[]) => void
 }) {
@@ -102,33 +74,38 @@ export function useSupportSessionList(options: {
   const total = ref(0)
   const loading = ref(false)
   const loadingMore = ref(false)
+  const loaded = ref(false)
   const hasMore = computed(() => list.value.length < total.value)
+  let seq = 0
 
   async function load(opts?: LoadOptions) {
     const silent = opts?.silent === true
     const append = opts?.append === true
+    const cur = ++seq
     if (append) loadingMore.value = true
     else if (!silent) loading.value = true
     try {
       const page = append ? Math.floor(list.value.length / SUPPORT_PAGE_SIZE) + 1 : 1
       const { data } = await options.fetch({ page, pageSize: SUPPORT_PAGE_SIZE })
+      if (cur !== seq && !append) return
       const fetched = data.list || []
       total.value = data.total || 0
       if (append) {
         const seen = new Set(list.value.map((x) => x.id))
         list.value.push(...fetched.filter((x) => !seen.has(x.id)))
-      } else if (options.mode === 'replace') {
-        list.value = fetched
-        options.onReplaced?.(list.value)
       } else if (silent) {
         list.value = softMergeSessions(list.value, fetched)
         options.onReplaced?.(list.value)
-      } else if (!sameSessionList(list.value, fetched)) {
+      } else if (!sameSessionIds(list.value, fetched)) {
         list.value = fetched
         options.onReplaced?.(list.value)
       } else {
-        mergeSessionFields(list.value, fetched)
+        list.value.forEach((x, i) => {
+          const next = fetched[i]
+          if (next) applySessionPatch(x, next)
+        })
       }
+      loaded.value = true
       options.onFetched?.(fetched)
     } catch (e) {
       if (!silent) showApiError(e, options.errorText)
@@ -143,7 +120,15 @@ export function useSupportSessionList(options: {
     void load({ append: true })
   }
 
-  return reactive({ list, total, loading, loadingMore, hasMore, load, loadMore })
+  function reset() {
+    seq++
+    list.value = []
+    total.value = 0
+    loaded.value = false
+    loading.value = false
+  }
+
+  return reactive({ list, total, loading, loadingMore, loaded, hasMore, load, loadMore, reset })
 }
 
 export type SupportSessionList = ReturnType<typeof useSupportSessionList>

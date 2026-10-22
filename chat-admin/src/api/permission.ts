@@ -20,30 +20,8 @@ export interface PermissionItem {
   updatedAt: string
 }
 
-export interface PermissionTreeItem {
-  id: number
-  name: string
-  code: string
-  type: number
-  parentId: number
-  path?: string
-  method?: string
-  sort: number
+export interface PermissionTreeItem extends PermissionItem {
   children?: PermissionTreeItem[]
-}
-
-export interface PermissionListRequest {
-  page: number
-  pageSize: number
-  name?: string
-  code?: string
-  type?: number
-  status?: number
-}
-
-export interface PermissionListResponse {
-  total: number
-  list: PermissionItem[]
 }
 
 export interface CreatePermissionRequest {
@@ -65,13 +43,11 @@ export interface UpdatePermissionRequest extends CreatePermissionRequest {
   id: number
 }
 
-export const getPermissionList = (params: PermissionListRequest) =>
-  request.get<PermissionListResponse>('/api/admin/permission/list', params)
-
+/** assignable 为 true 时只返回可分配给角色的启用菜单与按钮；否则返回全部（含禁用）。 */
 export const getPermissionTree = (params?: { assignable?: boolean }) =>
   request.get<PermissionTreeItem[]>(
     '/api/admin/permission/tree',
-    params?.assignable ? { assignable: '1' } : undefined,
+    params?.assignable ? { assignable: true } : undefined,
   )
 
 export const createPermission = (data: CreatePermissionRequest) =>

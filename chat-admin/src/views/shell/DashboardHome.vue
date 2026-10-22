@@ -4,11 +4,12 @@ import { useRouter } from 'vue-router'
 import { Menu } from '@element-plus/icons-vue'
 import { useAdminBadges } from '@/composables/useAdminBadges'
 import { useEmployeeStore } from '@/stores/employee'
-import { buildHomeSections } from '@/utils/menu'
+import { buildHomeSections, buildMenus, flattenMenuLeaves } from '@/utils/menu'
+import { readRecentVisits } from '@/utils/storage'
 
 const router = useRouter()
 const employeeStore = useEmployeeStore()
-const { badgeFor } = useAdminBadges()
+const { badgeFor, pendingQueryFor } = useAdminBadges()
 
 const name = computed(
   () => employeeStore.employeeInfo?.name || employeeStore.employeeInfo?.mobile || '同事',
@@ -16,8 +17,19 @@ const name = computed(
 
 const sections = computed(() => buildHomeSections(employeeStore.permissions))
 
+const recentVisits = computed(() => {
+  const id = employeeStore.employeeInfo?.id
+  if (!id) return []
+  const titleByPath = new Map(
+    flattenMenuLeaves(buildMenus(employeeStore.permissions)).map((m) => [m.path, m.title]),
+  )
+  return readRecentVisits(id)
+    .filter((v) => titleByPath.has(v.path))
+    .map((v) => ({ path: v.path, title: titleByPath.get(v.path) || v.title }))
+})
+
 function open(path: string) {
-  if (path) router.push(path)
+  if (path) void router.push({ path, query: pendingQueryFor(path) })
 }
 </script>
 
@@ -25,8 +37,17 @@ function open(path: string) {
   <div class="admin-page home-page">
     <div class="home-hero">
       <h1 class="home-hero__title">你好，{{ name }}</h1>
-      <p class="home-hero__desc">从下方入口进入常用功能，也可使用左侧菜单。</p>
+      <p class="home-hero__desc">从下方入口进入常用功能；按 Ctrl+K 可搜索菜单。</p>
     </div>
+
+    <section v-if="recentVisits.length" class="home-section">
+      <h2 class="home-section__title">最近访问</h2>
+      <div class="home-recent">
+        <el-button v-for="item in recentVisits" :key="item.path" @click="open(item.path)">
+          {{ item.title }}
+        </el-button>
+      </div>
+    </section>
 
     <el-empty v-if="sections.length === 0" description="当前账号暂无可用菜单权限，请联系管理员" />
 
@@ -122,6 +143,16 @@ function open(path: string) {
 .home-card:hover {
   border-color: color-mix(in srgb, var(--el-color-primary) 45%, var(--el-border-color-lighter));
   background: color-mix(in srgb, var(--el-color-primary) 6%, #fff);
+}
+
+.home-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-recent .el-button + .el-button {
+  margin-left: 0;
 }
 
 .home-card__top {

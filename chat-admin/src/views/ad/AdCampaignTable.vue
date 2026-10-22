@@ -1,14 +1,19 @@
 <template>
-  <el-table
-    :data="list"
-    v-loading="loading"
-    empty-text="暂无广告计划"
-    @selection-change="onSelectionChange"
-  >
-    <el-table-column type="selection" width="48" />
+  <el-table :data="list" v-loading="loading" @selection-change="onSelectionChange">
+    <el-table-column
+      v-if="selectable"
+      type="selection"
+      width="48"
+      :selectable="(row: AdCampaignItem) => row.status === AD_STATUS.Active"
+    />
     <el-table-column prop="id" label="ID" width="70" />
     <el-table-column prop="advertiserName" label="广告主" min-width="110" show-overflow-tooltip />
-    <el-table-column prop="title" label="标题" min-width="140" show-overflow-tooltip />
+    <el-table-column label="标题" min-width="160" show-overflow-tooltip>
+      <template #default="{ row }">
+        {{ row.title }}
+        <div v-if="row.name && row.name !== row.title" class="sub">{{ row.name }}</div>
+      </template>
+    </el-table-column>
     <el-table-column label="封面" width="72">
       <template #default="{ row }">
         <el-image
@@ -24,7 +29,16 @@
     </el-table-column>
     <el-table-column label="状态" width="100">
       <template #default="{ row }">
-        <el-tag :type="statusTagType(row.status)" size="small">{{ row.statusText }}</el-tag>
+        <el-tooltip
+          v-if="row.status === AD_STATUS.Rejected && row.rejectRemark"
+          :content="`驳回原因：${row.rejectRemark}`"
+          placement="top"
+        >
+          <el-tag :type="statusTagType(row.status)" size="small" class="tag-help">
+            {{ row.statusText }}
+          </el-tag>
+        </el-tooltip>
+        <el-tag v-else :type="statusTagType(row.status)" size="small">{{ row.statusText }}</el-tag>
       </template>
     </el-table-column>
     <el-table-column prop="priority" label="优先级" width="80" />
@@ -33,7 +47,7 @@
         <div class="stat-cell">
           <span>曝光 {{ row.todayImpressions ?? 0 }}</span>
           <span>点击 {{ row.todayClicks ?? 0 }}</span>
-          <span>CTR {{ formatCtr(row.todayCtr) }}</span>
+          <span>CTR {{ formatAdCtr(row.todayCtr) }}</span>
         </div>
       </template>
     </el-table-column>
@@ -70,7 +84,7 @@
             size="small"
             link
             type="primary"
-            @click="emit('status', row as AdCampaignItem, AD_STATUS.Pending, '提交审核')"
+            @click="emit('status', row as AdCampaignItem, AD_STATUS.Pending)"
           >
             提交审核
           </el-button>
@@ -84,11 +98,20 @@
             审核
           </el-button>
           <el-button
-            v-if="canPause(row as AdCampaignItem)"
+            v-if="canChangeStatus && row.status === AD_STATUS.Paused"
+            size="small"
+            link
+            type="success"
+            @click="emit('status', row as AdCampaignItem, AD_STATUS.Active)"
+          >
+            恢复投放
+          </el-button>
+          <el-button
+            v-if="canChangeStatus && row.status === AD_STATUS.Active"
             size="small"
             link
             type="warning"
-            @click="emit('status', row as AdCampaignItem, AD_STATUS.Paused, '暂停')"
+            @click="emit('status', row as AdCampaignItem, AD_STATUS.Paused)"
           >
             暂停
           </el-button>
@@ -97,7 +120,7 @@
             size="small"
             link
             type="info"
-            @click="emit('status', row as AdCampaignItem, AD_STATUS.Ended, '结束')"
+            @click="emit('status', row as AdCampaignItem, AD_STATUS.Ended)"
           >
             结束
           </el-button>
@@ -120,6 +143,9 @@
         </div>
       </template>
     </el-table-column>
+    <template #empty>
+      <TableEmpty :error="error" text="暂无广告计划" @retry="emit('page-change')" />
+    </template>
   </el-table>
 
   <div class="pagination">
@@ -136,17 +162,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
 import { formatUnixSeconds } from '@/utils/datetime'
 import { type AdCampaignItem } from '@/api/ad'
-import { AD_STATUS } from '@/constants/ad'
+import TableEmpty from '@/components/common/TableEmpty.vue'
+import { AD_STATUS, formatAdCtr } from '@/constants/ad'
 import { PERM } from '@/constants/permission'
 import { usePermission } from '@/composables/usePermission'
 
 defineProps<{
   list: AdCampaignItem[]
   loading: boolean
+  error: boolean
   total: number
+  selectable: boolean
 }>()
 
 const page = defineModel<number>('page', { required: true })
@@ -155,7 +185,7 @@ const pageSize = defineModel<number>('pageSize', { required: true })
 const emit = defineEmits<{
   'selection-change': [AdCampaignItem[]]
   edit: [AdCampaignItem]
-  status: [AdCampaignItem, number, string]
+  status: [AdCampaignItem, number]
   audit: [AdCampaignItem]
   copy: [AdCampaignItem]
   stats: [AdCampaignItem]
@@ -163,6 +193,7 @@ const emit = defineEmits<{
 }>()
 
 const { can } = usePermission()
+const canChangeStatus = computed(() => can(PERM.AdCampaignStatus))
 
 function onSelectionChange(rows: AdCampaignItem[]) {
   emit('selection-change', rows)
@@ -182,41 +213,27 @@ function statusTagType(status: number) {
   }
 }
 
-function formatCtr(ctr?: number) {
-  if (ctr == null || Number.isNaN(ctr)) return '0%'
-  return `${(ctr * 100).toFixed(2)}%`
-}
-
 function canEdit(row: AdCampaignItem) {
   return (
-    can(PERM.AdCampaignUpdate) && row.status !== AD_STATUS.Active && row.status !== AD_STATUS.Ended
-  )
-}
-
-function canSubmitAudit(row: AdCampaignItem) {
-  return (
-    can(PERM.AdCampaignStatus) &&
+    can(PERM.AdCampaignUpdate) &&
     (row.status === AD_STATUS.Draft ||
       row.status === AD_STATUS.Rejected ||
       row.status === AD_STATUS.Paused)
   )
 }
 
-function canAudit(row: AdCampaignItem) {
+function canSubmitAudit(row: AdCampaignItem) {
   return (
-    can(PERM.AdCampaignStatus) &&
-    (row.status === AD_STATUS.Pending || row.status === AD_STATUS.Paused)
+    canChangeStatus.value && (row.status === AD_STATUS.Draft || row.status === AD_STATUS.Rejected)
   )
 }
 
-function canPause(row: AdCampaignItem) {
-  return can(PERM.AdCampaignStatus) && row.status === AD_STATUS.Active
+function canAudit(row: AdCampaignItem) {
+  return can(PERM.AdCampaignAudit) && row.status === AD_STATUS.Pending
 }
 
 function canEnd(row: AdCampaignItem) {
-  return (
-    can(PERM.AdCampaignStatus) && row.status !== AD_STATUS.Ended && row.status !== AD_STATUS.Draft
-  )
+  return canChangeStatus.value && row.status !== AD_STATUS.Ended && row.status !== AD_STATUS.Draft
 }
 </script>
 
@@ -234,5 +251,8 @@ function canEnd(row: AdCampaignItem) {
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
+}
+.tag-help {
+  cursor: help;
 }
 </style>

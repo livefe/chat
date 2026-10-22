@@ -27,6 +27,8 @@ type RoomRepository interface {
 	List(ctx context.Context, f RoomListFilter) ([]*model.Room, int64, error)
 	ListNearCenter(ctx context.Context, lat, lng, radiusM float64, excludeID uint, statuses []uint8, limit int) ([]*model.Room, error)
 	CountByStatus(ctx context.Context, status uint8) (int64, error)
+	CountPostsByRoomIDs(ctx context.Context, roomIDs []uint) (map[uint]int64, error)
+	CountMessagesByRoomIDs(ctx context.Context, roomIDs []uint) (map[uint]int64, error)
 }
 
 type roomRepository struct {
@@ -74,7 +76,7 @@ func (r *roomRepository) List(ctx context.Context, f RoomListFilter) ([]*model.R
 		db = db.Where("user_id = ?", *f.UserID)
 	}
 	if f.Name != "" {
-		db = db.Where("name LIKE ?", "%"+f.Name+"%")
+		db = db.Where("name LIKE ?", contentLikePattern(f.Name))
 	}
 	if f.Status != nil {
 		db = db.Where("status = ?", *f.Status)
@@ -92,7 +94,7 @@ func (r *roomRepository) List(ctx context.Context, f RoomListFilter) ([]*model.R
 	}
 
 	var rooms []*model.Room
-	if err := db.Order("created_at DESC").
+	if err := db.Order("created_at DESC, id DESC").
 		Offset((f.Page - 1) * f.PageSize).
 		Limit(f.PageSize).
 		Find(&rooms).Error; err != nil {
@@ -135,4 +137,42 @@ func (r *roomRepository) CountByStatus(ctx context.Context, status uint8) (int64
 	var n int64
 	err := database.Conn(ctx, r.db).Model(&model.Room{}).Where("status = ?", status).Count(&n).Error
 	return n, err
+}
+
+func (r *roomRepository) CountPostsByRoomIDs(ctx context.Context, roomIDs []uint) (map[uint]int64, error) {
+	out := make(map[uint]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var rows []PostRoomCount
+	if err := database.Conn(ctx, r.db).Model(&model.Post{}).
+		Select("room_id, COUNT(*) AS cnt").
+		Where("room_id IN ?", roomIDs).
+		Group("room_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.RoomID] = row.Count
+	}
+	return out, nil
+}
+
+func (r *roomRepository) CountMessagesByRoomIDs(ctx context.Context, roomIDs []uint) (map[uint]int64, error) {
+	out := make(map[uint]int64, len(roomIDs))
+	if len(roomIDs) == 0 {
+		return out, nil
+	}
+	var rows []PostRoomCount
+	if err := database.Conn(ctx, r.db).Model(&model.Message{}).
+		Select("room_id, COUNT(*) AS cnt").
+		Where("scope = ? AND room_id IN ?", model.MessageScopeRoom, roomIDs).
+		Group("room_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.RoomID] = row.Count
+	}
+	return out, nil
 }

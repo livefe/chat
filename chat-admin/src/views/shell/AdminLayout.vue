@@ -2,21 +2,35 @@
   <el-container class="layout-container">
     <el-aside :width="sidebarCollapsed ? '64px' : '210px'" class="sidebar">
       <div class="logo">{{ sidebarCollapsed ? '管' : '管理后台' }}</div>
+      <div v-if="!sidebarCollapsed" class="menu-search">
+        <el-input
+          ref="searchRef"
+          v-model="menuKeyword"
+          size="small"
+          clearable
+          placeholder="搜索菜单（Ctrl+K）"
+          :prefix-icon="Search"
+          @keydown.enter.prevent="openFirstMatch"
+          @keydown.esc="menuKeyword = ''"
+        />
+      </div>
       <el-menu
+        :key="menuRenderKey"
         :default-active="route.path"
-        router
+        :default-openeds="searchOpeneds"
         class="sidebar-menu"
         :collapse="sidebarCollapsed"
         :collapse-transition="false"
         :background-color="menuColors.bg"
         :text-color="menuColors.text"
         :active-text-color="menuColors.active"
+        @select="onMenuSelect"
       >
-        <el-menu-item :index="homePath">
+        <el-menu-item v-if="!searching" :index="homePath">
           <el-icon><HomeFilled /></el-icon>
           <span>首页</span>
         </el-menu-item>
-        <template v-for="menu in menus" :key="menu.path || menu.title">
+        <template v-for="menu in displayMenus" :key="menu.path || menu.title">
           <el-menu-item v-if="!menu.children || menu.children.length === 0" :index="menu.path">
             <el-icon v-if="menu.icon"><component :is="menu.icon" /></el-icon>
             <span>{{ menu.title }}</span>
@@ -27,7 +41,7 @@
               class="menu-badge"
             />
           </el-menu-item>
-          <el-sub-menu v-else :index="`submenu:${menu.path || menu.title}`">
+          <el-sub-menu v-else :index="submenuIndex(menu)">
             <template #title>
               <el-icon v-if="menu.icon"><component :is="menu.icon" /></el-icon>
               <span>{{ menu.title }}</span>
@@ -43,6 +57,9 @@
             </el-menu-item>
           </el-sub-menu>
         </template>
+        <div v-if="searching && displayMenus.length === 0" class="menu-search-empty">
+          无匹配菜单
+        </div>
       </el-menu>
     </el-aside>
 
@@ -57,9 +74,16 @@
           </el-button>
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: homePath }">首页</el-breadcrumb-item>
-            <el-breadcrumb-item v-for="(item, index) in crumbTrail" :key="item.path || item.title">
-              <span v-if="index === crumbTrail.length - 1">{{ item.title }}</span>
-              <span v-else>{{ item.title }}</span>
+            <el-breadcrumb-item
+              v-for="(item, index) in crumbTrail"
+              :key="item.path || item.title"
+              :to="
+                index < crumbTrail.length - 1 && isRoutable(item.path)
+                  ? { path: item.path }
+                  : undefined
+              "
+            >
+              {{ item.title }}
             </el-breadcrumb-item>
             <el-breadcrumb-item
               v-if="route.path !== homePath && crumbTrail.length === 0 && route.meta.title"
@@ -94,6 +118,8 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <UserDrawer />
 
     <el-drawer v-model="profileVisible" title="个人资料" size="420px">
       <div v-loading="profileLoading" class="profile-drawer">
@@ -138,7 +164,7 @@
           </el-form-item>
           <el-form-item label="状态">
             <el-tag :type="profileForm.status === 1 ? 'success' : 'danger'">
-              {{ profileForm.status === 1 ? '正常' : '禁用' }}
+              {{ profileForm.status === 1 ? '启用' : '禁用' }}
             </el-tag>
           </el-form-item>
           <el-form-item>
@@ -151,16 +177,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type UploadRequestHandler } from 'element-plus'
-import { Expand, Fold, HomeFilled } from '@element-plus/icons-vue'
+import {
+  ElMessage,
+  ElMessageBox,
+  type InputInstance,
+  type UploadRequestHandler,
+} from 'element-plus'
+import { Expand, Fold, HomeFilled, Search } from '@element-plus/icons-vue'
 import { showApiError } from '@/utils/apiError'
 import { useEmployeeStore } from '@/stores/employee'
 import { getEmployeeMe, updateMyProfile, uploadMyAvatar, type EmployeeInfo } from '@/api/employee'
 import { useAdminBadges } from '@/composables/useAdminBadges'
-import { buildMenus, findMenuTrail } from '@/utils/menu'
+import {
+  buildMenus,
+  filterMenus,
+  findMenuTrail,
+  flattenMenuLeaves,
+  type MenuItem,
+} from '@/utils/menu'
+import { pushRecentVisit } from '@/utils/storage'
 import { HOME_PATH } from '@/router/dynamic'
+import UserDrawer from '@/components/user/UserDrawer.vue'
 
 const SIDEBAR_COLLAPSED_KEY = 'admin_sidebar_collapsed'
 
@@ -171,10 +210,65 @@ const employeeStore = useEmployeeStore()
 const menus = computed(() => buildMenus(employeeStore.permissions))
 const homePath = HOME_PATH
 
-const { badgeFor } = useAdminBadges()
+const { badgeFor, pendingQueryFor } = useAdminBadges()
+
+const searchRef = ref<InputInstance>()
+const menuKeyword = ref('')
+const searching = computed(() => menuKeyword.value.trim() !== '')
+const displayMenus = computed(() => filterMenus(menus.value, menuKeyword.value))
+const menuRenderKey = computed(() => (searching.value ? `search:${menuKeyword.value}` : 'all'))
+
+function submenuIndex(menu: MenuItem) {
+  return `submenu:${menu.path || menu.title}`
+}
+
+const searchOpeneds = computed(() =>
+  searching.value ? displayMenus.value.filter((m) => m.children?.length).map(submenuIndex) : [],
+)
+
+function navigateMenu(path: string) {
+  menuKeyword.value = ''
+  void router.push({ path, query: pendingQueryFor(path) })
+}
+
+function onMenuSelect(index: string) {
+  if (index.startsWith('submenu:')) return
+  navigateMenu(index)
+}
+
+function openFirstMatch() {
+  if (!searching.value) return
+  const first = flattenMenuLeaves(displayMenus.value)[0]
+  if (first) navigateMenu(first.path)
+}
+
+function onGlobalKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    sidebarCollapsed.value = false
+    void nextTick(() => searchRef.value?.focus())
+  }
+}
 
 const crumbTrail = computed(() =>
   route.path === homePath ? [] : findMenuTrail(menus.value, route.path),
+)
+
+function isRoutable(path: string) {
+  if (!path) return false
+  const resolved = router.resolve(path)
+  return resolved.matched.length > 0 && resolved.name !== 'NotFound'
+}
+
+watch(
+  () => route.path,
+  () => {
+    const employeeId = employeeStore.employeeInfo?.id
+    const title = route.meta.title
+    if (!employeeId || !route.meta.permission || typeof title !== 'string') return
+    pushRecentVisit(employeeId, { path: route.path, title })
+  },
+  { immediate: true },
 )
 
 const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1')
@@ -227,6 +321,7 @@ function onFocus() {
 
 onMounted(() => {
   window.addEventListener('focus', onFocus)
+  window.addEventListener('keydown', onGlobalKeydown)
   if (window.innerWidth < 960 && !sidebarCollapsed.value) {
     sidebarCollapsed.value = true
   }
@@ -234,6 +329,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('focus', onFocus)
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 
 async function openProfile() {
@@ -293,10 +389,12 @@ async function handleCommand(command: string) {
       cancelButtonText: '取消',
       type: 'warning',
     })
-    employeeStore.logout()
-    ElMessage.success('退出成功')
-    router.push('/login')
-  } catch {}
+  } catch {
+    return
+  }
+  employeeStore.logout()
+  ElMessage.success('退出成功')
+  void router.push('/login')
 }
 </script>
 
@@ -312,6 +410,18 @@ async function handleCommand(command: string) {
   padding: 6px;
   margin-right: 4px;
   color: var(--el-text-color-regular);
+}
+
+.menu-search {
+  padding: 10px 12px 4px;
+  flex-shrink: 0;
+}
+
+.menu-search-empty {
+  padding: 16px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--admin-sidebar-text);
 }
 
 .user-info {

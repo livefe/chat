@@ -50,15 +50,11 @@ func (r *adDailyStatRepository) Get(ctx context.Context, campaignID uint, date s
 }
 
 func (r *adDailyStatRepository) ListByCampaign(ctx context.Context, campaignID uint, fromDate, toDate string) ([]*model.AdDailyStat, error) {
-	q := database.Conn(ctx, r.db).Where("campaign_id = ?", campaignID)
-	if fromDate != "" {
-		q = q.Where("stat_date >= ?", fromDate)
-	}
-	if toDate != "" {
-		q = q.Where("stat_date <= ?", toDate)
-	}
 	var list []*model.AdDailyStat
-	err := q.Order("stat_date ASC").Find(&list).Error
+	err := database.Conn(ctx, r.db).
+		Where("campaign_id = ? AND stat_date >= ? AND stat_date <= ?", campaignID, fromDate, toDate).
+		Order("stat_date DESC").
+		Find(&list).Error
 	return list, err
 }
 

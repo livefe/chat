@@ -6,6 +6,7 @@ import {
 } from 'vue-router'
 
 import { useEmployeeStore } from '@/stores/employee'
+import { safeRedirect } from '@/utils/navigation'
 
 import { HOME_PATH, syncDynamicRoutes } from './dynamic'
 import { baseRoutes } from './routes'
@@ -15,19 +16,14 @@ const router = createRouter({
   routes: baseRoutes,
 })
 
-let catchAllRegistered = false
-
 function ensureCatchAll() {
-  if (catchAllRegistered || router.hasRoute('NotFound')) {
-    catchAllRegistered = true
-    return
-  }
-  router.addRoute({
+  if (router.hasRoute('NotFound')) return
+  router.addRoute('Layout', {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/shell/NotFoundPage.vue'),
+    meta: { title: '页面不存在' },
   })
-  catchAllRegistered = true
 }
 
 async function ensurePermissions(employee: ReturnType<typeof useEmployeeStore>) {
@@ -50,24 +46,33 @@ function rematchCurrent(to: RouteLocationNormalized) {
   }
 }
 
+/** 跳到登录页并记住当前地址，登录后回到这里。 */
+export function loginLocation(fullPath?: string) {
+  const redirect = safeRedirect(fullPath)
+  return {
+    path: '/login',
+    query: redirect && redirect !== HOME_PATH && redirect !== '/' ? { redirect } : undefined,
+  }
+}
+
 router.beforeEach(async (to) => {
   const employee = useEmployeeStore()
 
   if (!employee.isAuthenticated) {
-    return to.path === '/login' ? true : { path: '/login' }
+    return to.path === '/login' ? true : loginLocation(to.fullPath)
   }
 
   if (to.path === '/login') {
     if (to.query.switch === '1') {
       employee.logout()
-      return { path: '/login', replace: true }
+      return { path: '/login', query: { redirect: safeRedirect(to.query.redirect) }, replace: true }
     }
     if (!(await ensurePermissions(employee))) return true
     ensureCatchAll()
-    return { path: HOME_PATH, replace: true }
+    return { path: safeRedirect(to.query.redirect) ?? HOME_PATH, replace: true }
   }
 
-  if (!(await ensurePermissions(employee))) return { path: '/login' }
+  if (!(await ensurePermissions(employee))) return loginLocation(to.fullPath)
 
   syncDynamicRoutes(router, employee.permissions)
   ensureCatchAll()
@@ -93,8 +98,18 @@ router.beforeEach(async (to) => {
       await employee.loadPermissions()
       syncDynamicRoutes(router, employee.permissions)
       if (employee.hasPermission(permission)) return true
-    } catch {}
-    return { path: '/403', replace: true }
+    } catch {
+      // 刷新失败按无权限处理
+    }
+    return {
+      path: '/403',
+      query: {
+        from: to.fullPath,
+        title: typeof to.meta.title === 'string' ? to.meta.title : undefined,
+        permission,
+      },
+      replace: true,
+    }
   }
 })
 

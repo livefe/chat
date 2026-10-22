@@ -1,50 +1,50 @@
 <template>
-  <el-table :data="list" v-loading="loading" empty-text="暂无反馈">
+  <el-table
+    :data="list"
+    v-loading="loading"
+    row-key="id"
+    @selection-change="(rows: FeedbackItem[]) => emit('selection-change', rows)"
+  >
+    <template #empty>
+      <TableEmpty :error="error" text="暂无反馈" @retry="emit('page-change')" />
+    </template>
+    <el-table-column
+      v-if="can(PERM.UserFeedbackStatus)"
+      type="selection"
+      width="44"
+      :selectable="(row: FeedbackItem) => row.status === FeedbackStatus.Pending"
+    />
     <el-table-column prop="id" label="ID" width="70" />
-    <el-table-column label="用户" width="140">
+    <el-table-column label="用户" min-width="150">
       <template #default="{ row }">
-        <div>{{ row.userNickname || '-' }}</div>
-        <div class="sub">{{ row.userMobile }}</div>
+        <UserCell :user-id="row.userId" :nickname="row.userNickname" :mobile="row.userMobile" />
       </template>
     </el-table-column>
     <el-table-column prop="typeText" label="类型" width="100" />
-    <el-table-column prop="content" label="内容" min-width="200" show-overflow-tooltip />
+    <el-table-column prop="content" label="内容" min-width="220" show-overflow-tooltip />
     <el-table-column prop="contact" label="联系方式" width="120" show-overflow-tooltip />
-    <el-table-column label="状态" width="100">
+    <el-table-column label="状态" width="90">
       <template #default="{ row }">
-        <el-tag :type="statusTag(row.status)">{{ row.statusText }}</el-tag>
+        <el-tag :type="feedbackStatusTagType(row.status)">{{ row.statusText }}</el-tag>
       </template>
     </el-table-column>
-    <el-table-column label="处理人" width="120">
+    <el-table-column label="处理人" width="110">
       <template #default="{ row }">{{ row.employeeName || '-' }}</template>
     </el-table-column>
     <el-table-column prop="createdAt" label="提交时间" width="170" />
-    <el-table-column label="操作" width="140" fixed="right">
+    <el-table-column label="操作" width="90" fixed="right">
       <template #default="{ row }">
-        <div class="action-cell">
-          <el-button
-            v-if="can(PERM.UserFeedbackDetail)"
-            size="small"
-            link
-            type="primary"
-            @click="emit('detail', row as FeedbackItem)"
-          >
-            详情
-          </el-button>
-          <el-button
-            v-if="
-              can(PERM.UserFeedbackStatus) &&
-              row.status !== FeedbackStatus.Resolved &&
-              row.status !== FeedbackStatus.Closed
-            "
-            size="small"
-            link
-            type="primary"
-            @click="emit('handle', row as FeedbackItem)"
-          >
-            处理
-          </el-button>
-        </div>
+        <el-button
+          v-if="can(PERM.UserFeedbackDetail)"
+          size="small"
+          link
+          type="primary"
+          @click="emit('detail', row as FeedbackItem)"
+        >
+          {{
+            row.status === FeedbackStatus.Pending && can(PERM.UserFeedbackStatus) ? '处理' : '详情'
+          }}
+        </el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -63,15 +63,18 @@
 </template>
 
 <script setup lang="ts">
-import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
-import { type FeedbackItem } from '@/api/feedback'
-import { FeedbackStatus } from '@/constants/feedback'
-import { PERM } from '@/constants/permission'
+import type { FeedbackItem } from '@/api/feedback'
+import TableEmpty from '@/components/common/TableEmpty.vue'
+import UserCell from '@/components/common/UserCell.vue'
 import { usePermission } from '@/composables/usePermission'
+import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
+import { FeedbackStatus, feedbackStatusTagType } from '@/constants/feedback'
+import { PERM } from '@/constants/permission'
 
 defineProps<{
   list: FeedbackItem[]
   loading: boolean
+  error?: boolean
   total: number
 }>()
 
@@ -80,22 +83,9 @@ const pageSize = defineModel<number>('pageSize', { required: true })
 
 const emit = defineEmits<{
   detail: [FeedbackItem]
-  handle: [FeedbackItem]
+  'selection-change': [rows: FeedbackItem[]]
   'page-change': []
 }>()
 
 const { can } = usePermission()
-
-function statusTag(status: number) {
-  if (status === FeedbackStatus.Resolved) return 'success'
-  if (status === FeedbackStatus.Closed) return 'info'
-  return 'danger'
-}
 </script>
-
-<style scoped>
-.sub {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-</style>

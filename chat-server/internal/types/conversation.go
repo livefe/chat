@@ -43,10 +43,14 @@ type DeleteConversationResponse struct {
 	ClearedBeforeID uint `json:"clearedBeforeId"`
 }
 
+// AdminConversationListRequest 同时指定 UserID 与 PeerUserID 时精确匹配这一对用户；时间范围作用于最后活跃时间。
 type AdminConversationListRequest struct {
-	UserID   uint `form:"userId"`
-	Page     int  `form:"page" binding:"required,min=1"`
-	PageSize int  `form:"pageSize" binding:"required,min=1,max=100"`
+	UserID     uint   `form:"userId"`
+	PeerUserID uint   `form:"peerUserId"`
+	StartTime  string `form:"startTime"`
+	EndTime    string `form:"endTime"`
+	Page       int    `form:"page" binding:"required,min=1"`
+	PageSize   int    `form:"pageSize" binding:"required,min=1,max=100"`
 }
 
 type AdminConversationItem struct {

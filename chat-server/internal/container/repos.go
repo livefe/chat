@@ -26,6 +26,7 @@ type Repos struct {
 	Feedback             repository.FeedbackRepository
 	Report               repository.ReportRepository
 	UserDeactivationLog  repository.UserDeactivationLogRepository
+	UserPunishment       repository.UserPunishmentRepository
 	AuditLog             repository.AuditLogRepository
 	Region               repository.RegionRepository
 	Device               repository.DeviceRepository
@@ -70,6 +71,7 @@ func buildRepos(in *Infra) *Repos {
 		Feedback:             repository.NewFeedbackRepository(in.DB),
 		Report:               repository.NewReportRepository(in.DB),
 		UserDeactivationLog:  repository.NewUserDeactivationLogRepository(in.DB),
+		UserPunishment:       repository.NewUserPunishmentRepository(in.DB),
 		AuditLog:             repository.NewAuditLogRepository(in.DB),
 		Region:               repository.NewRegionRepository(in.DB),
 		Device:               repository.NewDeviceRepository(in.DB),

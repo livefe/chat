@@ -14,6 +14,7 @@ type EmployeeRoleRepository interface {
 	ListRoleIDsByEmployeeID(ctx context.Context, employeeID uint) ([]uint, error)
 	ListRoleIDsByEmployeeIDs(ctx context.Context, employeeIDs []uint) (map[uint][]uint, error)
 	HasAnyRole(ctx context.Context, employeeID uint) (bool, error)
+	CountGroupByRoleIDs(ctx context.Context, roleIDs []uint) (map[uint]int64, error)
 	ReplaceByEmployeeID(ctx context.Context, employeeID uint, items []*model.EmployeeRole) error
 }
 
@@ -67,6 +68,29 @@ func (r *employeeRoleRepository) HasAnyRole(ctx context.Context, employeeID uint
 		Where("employee_id = ?", employeeID).
 		Count(&count).Error
 	return count > 0, err
+}
+
+func (r *employeeRoleRepository) CountGroupByRoleIDs(ctx context.Context, roleIDs []uint) (map[uint]int64, error) {
+	out := make(map[uint]int64, len(roleIDs))
+	if len(roleIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		RoleID uint  `gorm:"column:role_id"`
+		Count  int64 `gorm:"column:count"`
+	}
+	var rows []row
+	if err := database.Conn(ctx, r.db).Model(&model.EmployeeRole{}).
+		Select("role_id, COUNT(*) AS count").
+		Where("role_id IN ?", roleIDs).
+		Group("role_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, item := range rows {
+		out[item.RoleID] = item.Count
+	}
+	return out, nil
 }
 
 func (r *employeeRoleRepository) ReplaceByEmployeeID(ctx context.Context, employeeID uint, items []*model.EmployeeRole) error {

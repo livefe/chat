@@ -138,9 +138,8 @@ func (s *FeedbackService) Submit(ctx context.Context, userID uint, req *types.Su
 }
 
 func (s *FeedbackService) ListMine(ctx context.Context, userID uint, req *types.MyFeedbackListRequest) (*types.FeedbackListResponse, error) {
-	uid := userID
 	list, total, err := s.feedbackRepo.List(ctx, repository.FeedbackListFilter{
-		UserID: &uid, Page: req.Page, PageSize: req.PageSize,
+		UserID: userID, Page: req.Page, PageSize: req.PageSize,
 	})
 	if err != nil {
 		s.log.Error(ctx, "查询我的反馈失败", logger.Error(err))
@@ -170,8 +169,8 @@ func (s *FeedbackService) GetMine(ctx context.Context, userID, id uint) (*types.
 
 func (s *FeedbackService) AdminList(ctx context.Context, req *types.AdminFeedbackListRequest) (*types.FeedbackListResponse, error) {
 	list, total, err := s.feedbackRepo.List(ctx, repository.FeedbackListFilter{
-		Status: req.Status,
-		Type:   req.Type, Keyword: req.Keyword,
+		Status: req.Status, Type: req.Type, UserID: req.UserID, Keyword: req.Keyword,
+		StartTime: req.StartTime, EndTime: req.EndTime,
 		Page: req.Page, PageSize: req.PageSize,
 	})
 	if err != nil {
@@ -181,36 +180,28 @@ func (s *FeedbackService) AdminList(ctx context.Context, req *types.AdminFeedbac
 
 	userIDs := make([]uint, 0, len(list))
 	employeeIDs := make([]uint, 0, len(list))
-	userSeen := make(map[uint]struct{})
-	employeeSeen := make(map[uint]struct{})
 	for _, fb := range list {
-		if _, ok := userSeen[fb.UserID]; !ok {
-			userSeen[fb.UserID] = struct{}{}
-			userIDs = append(userIDs, fb.UserID)
-		}
-		if fb.EmployeeID > 0 {
-			if _, ok := employeeSeen[fb.EmployeeID]; !ok {
-				employeeSeen[fb.EmployeeID] = struct{}{}
-				employeeIDs = append(employeeIDs, fb.EmployeeID)
-			}
-		}
+		userIDs = append(userIDs, fb.UserID)
+		employeeIDs = append(employeeIDs, fb.EmployeeID)
 	}
 	userMap := make(map[uint]*model.User)
-	if len(userIDs) > 0 {
-		users, err := s.userRepo.GetByIDs(ctx, userIDs)
-		if err == nil {
-			for _, u := range users {
-				userMap[u.ID] = u
-			}
+	if ids := uniqueNonZeroIDs(userIDs); len(ids) > 0 {
+		users, err := s.userRepo.GetByIDs(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("查询反馈列表失败: %w", err)
+		}
+		for _, u := range users {
+			userMap[u.ID] = u
 		}
 	}
 	employeeMap := make(map[uint]*model.Employee)
-	if len(employeeIDs) > 0 {
-		employees, err := s.employeeRepo.GetByIDs(ctx, employeeIDs)
-		if err == nil {
-			for _, e := range employees {
-				employeeMap[e.ID] = e
-			}
+	if ids := uniqueNonZeroIDs(employeeIDs); len(ids) > 0 {
+		employees, err := s.employeeRepo.GetByIDs(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("查询反馈列表失败: %w", err)
+		}
+		for _, e := range employees {
+			employeeMap[e.ID] = e
 		}
 	}
 
@@ -272,6 +263,22 @@ func (s *FeedbackService) AdminUpdateStatus(ctx context.Context, employeeID uint
 	return nil
 }
 
+// AdminBatchClose 批量关闭待处理反馈；非待处理的记录计入跳过。
+func (s *FeedbackService) AdminBatchClose(ctx context.Context, employeeID uint, req *types.AdminFeedbackBatchCloseRequest) (*types.AdminFeedbackBatchResult, error) {
+	ids := uniqueNonZeroIDs(req.IDs)
+	n, err := s.feedbackRepo.UpdatePendingByIDs(ctx, ids, map[string]any{
+		"status":        model.FeedbackStatusClosed,
+		"handle_result": strings.TrimSpace(req.HandleResult),
+		"employee_id":   employeeID,
+		"handled_at":    time.Now().Unix(),
+	})
+	if err != nil {
+		s.log.Error(ctx, "批量关闭反馈失败", logger.Error(err))
+		return nil, fmt.Errorf("批量关闭失败: %w", err)
+	}
+	return &types.AdminFeedbackBatchResult{Updated: n, Skipped: int64(len(ids)) - n}, nil
+}
+
 func canTransitionFeedbackStatus(from, to uint8) bool {
 	if from == to {
 		return true
@@ -311,8 +318,8 @@ func (s *FeedbackService) toFeedbackItem(ctx context.Context, fb *model.Feedback
 		item.HandledAt = utils.FormatDateTime(time.Unix(fb.HandledAt, 0))
 	}
 	if user != nil {
-		item.UserNickname = user.Nickname
-		item.UserMobile = user.Mobile
+		item.UserNickname = utils.DisplayName(user.Nickname)
+		item.UserMobile = utils.DesensitizeMobile(user.Mobile)
 	}
 	if employee != nil {
 		item.EmployeeName = employee.Name

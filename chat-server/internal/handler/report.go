@@ -63,9 +63,10 @@ func (h *ReportHandler) AdminHandle(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.reportSvc.AdminHandle(c.Request.Context(), middleware.CurrentEmployeeID(c), &req); err != nil {
+	result, err := h.reportSvc.AdminHandle(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
 		response.WriteError(c, err)
 		return
 	}
-	response.Success(c, "处理成功", nil)
+	response.Success(c, "处理成功", result)
 }

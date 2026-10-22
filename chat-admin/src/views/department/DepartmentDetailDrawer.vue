@@ -8,7 +8,10 @@
           department.parentName || '顶级'
         }}</el-descriptions-item>
         <el-descriptions-item label="层级">{{ department.level }}</el-descriptions-item>
-        <el-descriptions-item label="员工数">{{ department.employeeCount }}</el-descriptions-item>
+        <el-descriptions-item label="直属员工">{{ department.employeeCount }}</el-descriptions-item>
+        <el-descriptions-item label="含下级合计">
+          {{ department.totalEmployeeCount }}
+        </el-descriptions-item>
         <el-descriptions-item label="排序">{{ department.sort }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="department.status === 1 ? 'success' : 'danger'">{{
@@ -21,11 +24,11 @@
       </el-descriptions>
       <div class="detail-actions">
         <el-button
-          v-if="department.employeeCount > 0 && can(PERM.OrgEmployee)"
+          v-if="department.totalEmployeeCount > 0 && can(PERM.OrgEmployee)"
           type="primary"
           @click="emit('employees', department)"
         >
-          查看员工
+          查看员工（{{ department.totalEmployeeCount }}）
         </el-button>
         <el-button
           v-if="can(PERM.OrgDepartmentCreate) && department.level < 5"

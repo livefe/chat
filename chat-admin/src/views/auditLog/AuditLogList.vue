@@ -11,10 +11,13 @@
         v-model:employee-id="query.employeeId"
         v-model:module="query.module"
         v-model:action="query.action"
+        v-model:target-type="query.targetType"
+        v-model:target-id="query.targetId"
+        v-model:request-path="query.requestPath"
+        v-model:success="query.success"
         v-model:keyword="query.keyword"
         v-model:time-range="timeRange"
-        :module-options="moduleOptions"
-        :action-options="actionOptions"
+        :options="options"
         @search="handleSearch"
         @reset="handleReset"
       />
@@ -22,10 +25,12 @@
       <AuditLogTable
         :list="list"
         :loading="loading"
+        :error="error"
         :total="total"
         v-model:page="query.page"
         v-model:page-size="query.pageSize"
         @detail="(row) => detailRef?.open(row)"
+        @filter-employee="filterByEmployee"
         @page-change="fetchList"
       />
     </el-card>
@@ -35,76 +40,65 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref, toRef } from 'vue'
 import { useRoute } from 'vue-router'
-import { getAuditLogList, type AuditActionOption, type AuditModuleOption } from '@/api/auditLog'
-import { usePaginatedList } from '@/composables/usePaginatedList'
+import { getAuditLogList, getAuditLogOptions, type AuditOptions } from '@/api/auditLog'
+import { useDateRangeModel } from '@/composables/useDateRangeModel'
+import { useListQuery } from '@/composables/useListQuery'
+import { DEFAULT_PAGE_SIZE } from '@/constants'
+import { showApiError } from '@/utils/apiError'
 import AuditLogDetailDrawer from './AuditLogDetailDrawer.vue'
 import AuditLogFilter from './AuditLogFilter.vue'
 import AuditLogTable from './AuditLogTable.vue'
 
 const route = useRoute()
-const timeRange = ref<[string, string] | null>(null)
-const moduleOptions = ref<AuditModuleOption[]>([])
-const actionOptions = ref<AuditActionOption[]>([])
 const detailRef = ref<InstanceType<typeof AuditLogDetailDrawer>>()
+const options = ref<AuditOptions>({ modules: [], actions: [], targetTypes: [] })
 
-const {
-  loading,
-  list,
-  total,
-  query,
-  fetchList,
-  handleSearch: doSearch,
-  handleReset: doReset,
-} = usePaginatedList(
-  async (q) => {
-    const res = await getAuditLogList({
-      page: q.page,
-      pageSize: q.pageSize,
-      employeeId: q.employeeId || undefined,
-      module: q.module || undefined,
-      action: q.action || undefined,
-      keyword: q.keyword || undefined,
-      startTime: q.startTime || undefined,
-      endTime: q.endTime || undefined,
-    })
-    moduleOptions.value = res.data.modules ?? []
-    actionOptions.value = res.data.actions ?? []
-    return res
-  },
-  {
+const { loading, error, list, total, query, fetchList, handleSearch, handleReset } = useListQuery({
+  fetch: (q) => getAuditLogList(q),
+  defaults: {
     page: 1,
-    pageSize: 20,
+    pageSize: DEFAULT_PAGE_SIZE,
     employeeId: undefined as number | undefined,
     module: '',
     action: '',
+    targetType: '',
+    targetId: undefined as number | undefined,
+    requestPath: '',
+    success: undefined as boolean | undefined,
     keyword: '',
     startTime: '',
     endTime: '',
   },
-  '获取审计日志失败',
-)
+  schema: {
+    employeeId: 'number',
+    module: 'string',
+    action: 'string',
+    targetType: 'string',
+    targetId: 'number',
+    requestPath: 'string',
+    success: 'boolean',
+    keyword: 'string',
+    startTime: 'string',
+    endTime: 'string',
+  },
+  errorMessage: '获取操作审计失败',
+})
 
-function syncTimeRange() {
-  if (timeRange.value?.length === 2) {
-    query.startTime = timeRange.value[0]
-    query.endTime = timeRange.value[1]
-  } else {
-    query.startTime = ''
-    query.endTime = ''
+const timeRange = useDateRangeModel(toRef(query, 'startTime'), toRef(query, 'endTime'))
+
+function filterByEmployee(employeeId: number) {
+  query.employeeId = employeeId
+  void handleSearch()
+}
+
+onMounted(async () => {
+  try {
+    const { data } = await getAuditLogOptions()
+    options.value = data
+  } catch (e) {
+    showApiError(e, '加载筛选项失败')
   }
-}
-
-function handleSearch() {
-  syncTimeRange()
-  doSearch()
-}
-
-function handleReset() {
-  timeRange.value = null
-  doReset()
-}
-
-fetchList()
+})
 </script>

@@ -60,28 +60,17 @@ func (s *UserService) Deactivate(ctx context.Context, userID uint, code, ip, ua 
 }
 
 func (s *UserService) AdminDeactivate(ctx context.Context, employeeID uint, userID uint, reason string, ip, ua string) error {
-	user, err := s.userRepo.GetByID(ctx, userID)
+	user, err := s.adminGetActive(ctx, userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errs.NotFound("用户不存在")
-		}
-		return fmt.Errorf("系统错误，请稍后重试: %w", err)
+		return err
 	}
-	if err := s.finalizeDeactivation(ctx, user, deactivationContext{
+	return s.finalizeDeactivation(ctx, user, deactivationContext{
 		Source:     model.DeactivationSourceAdmin,
 		EmployeeID: employeeID,
 		Reason:     reason,
 		IP:         ip,
 		UserAgent:  ua,
-	}); err != nil {
-		return err
-	}
-	s.log.Info(ctx, "管理员注销用户",
-		logger.Uint("user_id", userID),
-		logger.Uint("employee_id", employeeID),
-		logger.String("reason", reason),
-	)
-	return nil
+	})
 }
 
 func (s *UserService) finalizeDeactivation(ctx context.Context, user *model.User, meta deactivationContext) error {
@@ -112,6 +101,14 @@ func (s *UserService) finalizeDeactivation(ctx context.Context, user *model.User
 		}
 		if err := s.deactivationRepo.Create(ctx, logEntry); err != nil {
 			return err
+		}
+		if meta.Source == model.DeactivationSourceAdmin {
+			if err := s.recordPunishment(ctx, user.ID, model.PunishActionDeactivate, 0, PunishMeta{
+				EmployeeID: meta.EmployeeID,
+				Reason:     meta.Reason,
+			}); err != nil {
+				return err
+			}
 		}
 		if err := s.convDelRepo.DeleteByUserID(ctx, user.ID); err != nil {
 			return err

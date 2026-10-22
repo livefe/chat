@@ -11,7 +11,7 @@ type CreatePermissionRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Code        string `json:"code" binding:"required"`
 	Description string `json:"description"`
-	Type        uint8  `json:"type" binding:"required,oneof=1 2 3 4"`
+	Type        uint8  `json:"type" binding:"required,oneof=1 2 3"`
 	ParentID    uint   `json:"parentId"`
 	Path        string `json:"path"`
 	Method      string `json:"method"`
@@ -25,20 +25,6 @@ type CreatePermissionRequest struct {
 type UpdatePermissionRequest struct {
 	ID uint `json:"id" binding:"required"`
 	CreatePermissionRequest
-}
-
-type PermissionListRequest struct {
-	Name     string `form:"name"`
-	Code     string `form:"code"`
-	Type     *uint8 `form:"type"`
-	Status   *uint8 `form:"status"`
-	Page     int    `form:"page" binding:"required,min=1"`
-	PageSize int    `form:"pageSize" binding:"required,min=1,max=100"`
-}
-
-type PermissionListResponse struct {
-	Total int64            `json:"total"`
-	List  []PermissionItem `json:"list"`
 }
 
 type PermissionItem struct {
@@ -61,14 +47,12 @@ type PermissionItem struct {
 	UpdatedAt   string `json:"updatedAt"`
 }
 
+type PermissionTreeRequest struct {
+	// 为 true 时只返回可分配给角色的启用菜单与按钮
+	Assignable bool `form:"assignable"`
+}
+
 type PermissionTreeItem struct {
-	ID       uint                  `json:"id"`
-	Name     string                `json:"name"`
-	Code     string                `json:"code"`
-	Type     uint8                 `json:"type"`
-	ParentID uint                  `json:"parentId"`
-	Path     string                `json:"path,omitempty"`
-	Method   string                `json:"method,omitempty"`
-	Sort     uint                  `json:"sort"`
+	PermissionItem
 	Children []*PermissionTreeItem `json:"children,omitempty"`
 }

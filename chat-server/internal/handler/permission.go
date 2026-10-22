@@ -56,35 +56,12 @@ func (h *PermissionHandler) Delete(c *gin.Context) {
 	response.Success(c, "删除成功", nil)
 }
 
-func (h *PermissionHandler) Detail(c *gin.Context) {
-	var req types.IDRequest
-	if !bindQuery(c, &req) {
-		return
-	}
-	p, err := h.permSvc.AdminGet(c.Request.Context(), req.ID)
-	if err != nil {
-		response.WriteError(c, err)
-		return
-	}
-	response.Success(c, "", p)
-}
-
-func (h *PermissionHandler) List(c *gin.Context) {
-	var req types.PermissionListRequest
-	if !bindQuery(c, &req) {
-		return
-	}
-	result, err := h.permSvc.AdminList(c.Request.Context(), &req)
-	if err != nil {
-		response.WriteError(c, err)
-		return
-	}
-	response.Success(c, "", result)
-}
-
 func (h *PermissionHandler) Tree(c *gin.Context) {
-	assignableOnly := c.Query("assignable") == "1"
-	tree, err := h.permSvc.AdminTree(c.Request.Context(), assignableOnly)
+	var req types.PermissionTreeRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	tree, err := h.permSvc.AdminTree(c.Request.Context(), req.Assignable)
 	if err != nil {
 		response.WriteError(c, err)
 		return

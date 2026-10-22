@@ -6,8 +6,9 @@ export const SENSITIVE_CATEGORY_OPTIONS = [
   { value: 'other', label: '其他' },
 ]
 
-export const SENSITIVE_LEVEL_OPTIONS = [
-  { value: 1, label: '高' },
-  { value: 2, label: '中' },
-  { value: 3, label: '低' },
+export const SENSITIVE_STATUS_OPTIONS = [
+  { label: '启用', value: 1 },
+  { label: '停用', value: 0 },
 ]
+
+export const SENSITIVE_WORD_MAX_LEN = 64

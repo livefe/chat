@@ -11,7 +11,7 @@ export interface FeedbackItem {
   images: string[]
   status: number
   statusText: string
-  reply: string
+  handleResult: string
   handledAt: string
   createdAt: string
 }

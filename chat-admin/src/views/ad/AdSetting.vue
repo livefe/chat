@@ -84,7 +84,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAdSetting, updateAdSetting } from '@/api/ad'
 import { showApiError } from '@/utils/apiError'
 import { PERM } from '@/constants/permission'
@@ -93,6 +93,7 @@ import { usePermission } from '@/composables/usePermission'
 const { can } = usePermission()
 const loading = ref(false)
 const saving = ref(false)
+const savedEnabled = ref(true)
 
 const form = reactive({
   enabled: true,
@@ -109,6 +110,7 @@ async function loadSetting() {
   try {
     const { data } = await getAdSetting()
     form.enabled = !!data.enabled
+    savedEnabled.value = form.enabled
     form.firstSlotAfter = data.firstSlotAfter
     form.slotInterval = data.slotInterval
     form.maxActivePerAdvertiser = data.maxActivePerAdvertiser
@@ -121,6 +123,17 @@ async function loadSetting() {
 }
 
 async function handleSave() {
+  if (savedEnabled.value && !form.enabled) {
+    try {
+      await ElMessageBox.confirm(
+        '关闭后信息流将立即停止插入所有广告（计划状态不变），重新开启后恢复。确定关闭投放？',
+        '关闭广告投放',
+        { type: 'warning', confirmButtonText: '确定关闭' },
+      )
+    } catch {
+      return
+    }
+  }
   saving.value = true
   try {
     await updateAdSetting({
@@ -130,6 +143,7 @@ async function handleSave() {
       maxActivePerAdvertiser: form.maxActivePerAdvertiser,
       lowCtrThreshold: form.lowCtrThreshold,
     })
+    savedEnabled.value = form.enabled
     ElMessage.success('保存成功')
   } catch (e) {
     showApiError(e, '保存失败')

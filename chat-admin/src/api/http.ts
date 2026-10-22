@@ -116,15 +116,38 @@ api.interceptors.response.use(
   },
 )
 
+function compactParams(params?: object) {
+  if (!params) return undefined
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null) continue
+    if (typeof v === 'string' && v.trim() === '') continue
+    out[k] = typeof v === 'string' ? v.trim() : v
+  }
+  return out
+}
+
 export const request = {
   get: <T = unknown>(url: string, params?: object, config?: AxiosRequestConfig) =>
-    api.get<unknown, ApiResponse<T>>(url, { params, ...config }),
+    api.get<unknown, ApiResponse<T>>(url, { params: compactParams(params), ...config }),
   post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
     api.post<unknown, ApiResponse<T>>(url, data, config),
 }
 
-export function uploadForm<T = unknown>(url: string, form: FormData, timeout = 60000) {
-  return request.post<T>(url, form, { timeout })
+export function uploadForm<T = unknown>(
+  url: string,
+  form: FormData,
+  timeout = 60000,
+  onProgress?: (percent: number) => void,
+) {
+  return request.post<T>(url, form, {
+    timeout,
+    onUploadProgress: onProgress
+      ? (e) => {
+          if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
+        }
+      : undefined,
+  })
 }
 
 export { formatRequestError }

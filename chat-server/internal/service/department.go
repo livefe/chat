@@ -40,7 +40,8 @@ func NewDepartmentService(
 	}
 }
 
-func (s *DepartmentService) List(ctx context.Context, req *types.DepartmentListRequest) (*types.DepartmentTreeResponse, error) {
+// List 返回完整部门树，筛选由前端在树上完成。
+func (s *DepartmentService) List(ctx context.Context) (*types.DepartmentTreeResponse, error) {
 	all, err := s.deptRepo.List(ctx, repository.DepartmentListFilter{})
 	if err != nil {
 		s.log.Error(ctx, "查询部门列表失败", logger.Error(err))
@@ -56,38 +57,22 @@ func (s *DepartmentService) List(ctx context.Context, req *types.DepartmentListR
 		return nil, fmt.Errorf("查询部门列表失败: %w", err)
 	}
 	nameByID := make(map[uint]string, len(all))
+	totalByID := make(map[uint]int64, len(all))
 	for _, d := range all {
 		nameByID[d.ID] = d.Name
-	}
-
-	keep := make(map[uint]struct{})
-	nameQ := strings.TrimSpace(req.Name)
-	for _, d := range all {
-		if nameQ != "" && !strings.Contains(d.Name, nameQ) {
-			continue
-		}
-		if req.Status != nil && d.Status != *req.Status {
-			continue
-		}
-		keep[d.ID] = struct{}{}
+		n := countMap[d.ID]
+		totalByID[d.ID] += n
 		for _, pid := range ancestorIDs(d.Path, d.ID) {
-			keep[pid] = struct{}{}
-		}
-	}
-	if nameQ == "" && req.Status == nil {
-		for _, d := range all {
-			keep[d.ID] = struct{}{}
+			totalByID[pid] += n
 		}
 	}
 
 	nodes := make(map[uint]*types.DepartmentTreeItem, len(all))
 	ordered := make([]*model.Department, 0, len(all))
 	for _, d := range all {
-		if _, ok := keep[d.ID]; !ok {
-			continue
-		}
 		item := toDepartmentItem(d, nameByID[d.ParentID])
 		item.EmployeeCount = countMap[d.ID]
+		item.TotalEmployeeCount = totalByID[d.ID]
 		nodes[d.ID] = &types.DepartmentTreeItem{DepartmentItem: item, Children: []types.DepartmentTreeItem{}}
 		ordered = append(ordered, d)
 	}

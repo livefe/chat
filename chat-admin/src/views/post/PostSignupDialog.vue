@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="title"
+    :title="post ? `报名名单 - ${post.title}` : '报名名单'"
     width="1080px"
     destroy-on-close
     :close-on-click-modal="false"
@@ -20,33 +20,54 @@
           <span class="signup-tab__count">{{ tab.count }}</span>
         </button>
       </div>
-      <div v-if="showCheckInTabs" class="signup-checkin">
-        <button
-          v-for="tab in checkInTabs"
-          :key="tab.key"
-          type="button"
-          class="signup-checkin__chip"
-          :class="{ 'is-on': isCheckInOn(tab) }"
-          @click="onCheckInClick(tab)"
-        >
-          {{ tab.label }} {{ tab.count }}
-        </button>
+      <div class="signup-toolbar">
+        <div v-if="showCheckInTabs" class="signup-checkin">
+          <button
+            v-for="tab in checkInTabs"
+            :key="tab.key"
+            type="button"
+            class="signup-checkin__chip"
+            :class="{ 'is-on': isCheckInOn(tab) }"
+            @click="onCheckInClick(tab)"
+          >
+            {{ tab.label }} {{ tab.count }}
+          </button>
+        </div>
+        <div class="signup-search">
+          <el-input
+            v-model="userIdText"
+            placeholder="用户ID"
+            clearable
+            style="width: 110px"
+            @keyup.enter="handleSearch"
+          />
+          <el-input
+            v-model="query.keyword"
+            placeholder="昵称/手机号"
+            clearable
+            style="width: 150px"
+            @keyup.enter="handleSearch"
+          />
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button :loading="exporting" :disabled="!total" @click="exportCsv">导出</el-button>
+        </div>
       </div>
     </div>
-    <el-table :data="list" v-loading="loading" max-height="420">
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column label="用户" min-width="160">
+    <el-table :data="list" v-loading="loading" max-height="420" @sort-change="onSortChange">
+      <template #empty>
+        <TableEmpty :error="error" text="暂无报名记录" @retry="fetchList" />
+      </template>
+      <el-table-column label="用户" min-width="180">
         <template #default="{ row }">
-          <div>{{ row.userNickname || '-' }}</div>
-          <div class="sub">{{ row.userMobile || `ID ${row.userId}` }}</div>
+          <UserCell :user-id="row.userId" :nickname="row.userNickname" :mobile="row.userMobile" />
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="90">
         <template #default="{ row }">
           <el-tag :type="signupStatusTag(row.signupStatus)">{{ row.signupStatusText }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="报名时间" width="170" />
+      <el-table-column prop="createdAt" label="报名时间" width="170" sortable="custom" />
       <el-table-column v-if="needCheckIn" label="核验" width="90">
         <template #default="{ row }">
           <el-tag :type="signupCheckInTag(row as PostSignupItem)">{{
@@ -54,7 +75,13 @@
           }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column v-if="needCheckIn" prop="checkedInAt" label="核验时间" width="170">
+      <el-table-column
+        v-if="needCheckIn"
+        prop="checkedInAt"
+        label="核验时间"
+        width="170"
+        sortable="custom"
+      >
         <template #default="{ row }">{{ row.checkedInAt || '-' }}</template>
       </el-table-column>
       <el-table-column prop="cancelledAt" label="取消时间" width="170">
@@ -66,25 +93,38 @@
     </el-table>
     <div class="pagination">
       <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
+        v-model:current-page="query.page"
+        v-model:page-size="query.pageSize"
         :total="total"
         :page-sizes="PAGE_SIZES"
         :layout="PAGINATION_LAYOUT"
-        @size-change="emit('fetch')"
-        @current-change="emit('fetch')"
+        @size-change="fetchList"
+        @current-change="fetchList"
       />
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 
-import type { PostSignupItem, PostSignupListCounts } from '@/api/post'
+import {
+  getPostSignupList,
+  type PostItem,
+  type PostSignupItem,
+  type PostSignupListCounts,
+  type PostSignupListRequest,
+  type SignupSortField,
+} from '@/api/post'
+import TableEmpty from '@/components/common/TableEmpty.vue'
+import UserCell from '@/components/common/UserCell.vue'
+import { useListQuery } from '@/composables/useListQuery'
 import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
 import { SignupCheckIn, SignupStatus } from '@/constants/post'
+import { showApiError } from '@/utils/apiError'
 import {
+  downloadCsv,
   emptySignupListCounts,
   signupCheckInTag,
   signupCheckInText,
@@ -99,25 +139,73 @@ interface SignupTab {
   checkIn?: number
 }
 
+const EXPORT_PAGE_SIZE = 100
+const EXPORT_MAX_ROWS = 10000
+
 const visible = defineModel<boolean>({ required: true })
-const page = defineModel<number>('page', { required: true })
-const pageSize = defineModel<number>('pageSize', { required: true })
-const status = defineModel<number>('status')
-const checkIn = defineModel<number>('checkIn')
+const props = defineProps<{ post: Pick<PostItem, 'id' | 'title'> | null }>()
 
-const props = defineProps<{
-  title: string
-  list: PostSignupItem[]
-  loading: boolean
-  total: number
-  needCheckIn?: boolean
-  counts?: PostSignupListCounts
-}>()
+const needCheckIn = ref(false)
+const counts = ref<PostSignupListCounts>(emptySignupListCounts())
+const exporting = ref(false)
 
-const emit = defineEmits<{ fetch: [] }>()
+const defaults = {
+  page: 1,
+  pageSize: 20,
+  status: undefined as number | undefined,
+  checkIn: undefined as number | undefined,
+  userId: undefined as number | undefined,
+  keyword: '',
+  sortField: undefined as SignupSortField | undefined,
+  sortOrder: undefined as 'asc' | 'desc' | undefined,
+}
+
+function filterParams(q: typeof defaults): Omit<PostSignupListRequest, 'page' | 'pageSize'> {
+  return {
+    postId: props.post?.id ?? 0,
+    status: q.status,
+    checkIn: q.checkIn,
+    userId: q.userId,
+    keyword: q.keyword,
+    sortField: q.sortField,
+    sortOrder: q.sortOrder,
+  }
+}
+
+const { query, list, total, loading, error, fetchList, handleSearch } = useListQuery({
+  fetch: (q) =>
+    getPostSignupList({ ...filterParams(q), page: q.page, pageSize: q.pageSize }).then((res) => {
+      needCheckIn.value = !!res.data.needCheckIn
+      counts.value = res.data.counts ?? emptySignupListCounts()
+      return res
+    }),
+  defaults,
+  errorMessage: '获取报名名单失败',
+  syncUrl: false,
+  immediate: false,
+})
+
+const userIdText = computed({
+  get: () => (query.userId ? String(query.userId) : ''),
+  set: (v: string) => {
+    const n = Number(v.trim())
+    query.userId = Number.isInteger(n) && n > 0 ? n : undefined
+  },
+})
+
+watch(
+  () => [visible.value, props.post?.id] as const,
+  ([open, postId]) => {
+    if (!open || !postId) return
+    Object.assign(query, { ...defaults, pageSize: query.pageSize })
+    counts.value = emptySignupListCounts()
+    void fetchList()
+  },
+  { immediate: true },
+)
 
 const tabs = computed<SignupTab[]>(() => {
-  const c = props.counts ?? emptySignupListCounts()
+  const c = counts.value
   return [
     { key: 'all', label: '全部', count: c.total },
     { key: 'confirmed', label: '已报名', count: c.confirmed, status: SignupStatus.Confirmed },
@@ -127,7 +215,7 @@ const tabs = computed<SignupTab[]>(() => {
 })
 
 const checkInTabs = computed<SignupTab[]>(() => {
-  const c = props.counts ?? emptySignupListCounts()
+  const c = counts.value
   return [
     {
       key: 'notChecked',
@@ -139,32 +227,80 @@ const checkInTabs = computed<SignupTab[]>(() => {
   ]
 })
 
-const showCheckInTabs = computed(
-  () => !!props.needCheckIn && status.value === SignupStatus.Confirmed,
-)
+const showCheckInTabs = computed(() => needCheckIn.value && query.status === SignupStatus.Confirmed)
 
 function isStatusOn(tab: SignupTab) {
-  return status.value === tab.status
+  return query.status === tab.status
 }
 
 function isCheckInOn(tab: SignupTab) {
-  return checkIn.value === tab.checkIn
+  return query.checkIn === tab.checkIn
 }
 
 function onStatusClick(tab: SignupTab) {
-  if (status.value === tab.status && checkIn.value === undefined) return
-  status.value = tab.status
-  checkIn.value = undefined
-  page.value = 1
-  emit('fetch')
+  if (query.status === tab.status && query.checkIn === undefined) return
+  query.status = tab.status
+  query.checkIn = undefined
+  void handleSearch()
 }
 
 function onCheckInClick(tab: SignupTab) {
-  const next = checkIn.value === tab.checkIn ? undefined : tab.checkIn
-  status.value = SignupStatus.Confirmed
-  checkIn.value = next
-  page.value = 1
-  emit('fetch')
+  query.status = SignupStatus.Confirmed
+  query.checkIn = query.checkIn === tab.checkIn ? undefined : tab.checkIn
+  void handleSearch()
+}
+
+function onSortChange({ prop, order }: { prop: string | null; order: string | null }) {
+  if (!prop || !order) {
+    query.sortField = undefined
+    query.sortOrder = undefined
+  } else {
+    query.sortField = prop as SignupSortField
+    query.sortOrder = order === 'ascending' ? 'asc' : 'desc'
+  }
+  void handleSearch()
+}
+
+function timestamp() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}`
+}
+
+async function exportCsv() {
+  if (!props.post) return
+  exporting.value = true
+  try {
+    const params = filterParams(query)
+    const rows: PostSignupItem[] = []
+    for (let page = 1; rows.length < EXPORT_MAX_ROWS; page++) {
+      const { data } = await getPostSignupList({ ...params, page, pageSize: EXPORT_PAGE_SIZE })
+      rows.push(...data.list)
+      if (data.list.length < EXPORT_PAGE_SIZE || rows.length >= data.total) break
+    }
+    downloadCsv(
+      `报名名单_${props.post.id}_${timestamp()}.csv`,
+      ['用户ID', '昵称', '手机号', '状态', '报名时间', '核验', '核验时间', '取消时间', '备注'],
+      rows.map((r) => [
+        r.userId,
+        r.userNickname,
+        r.userMobile,
+        r.signupStatusText,
+        r.createdAt,
+        signupCheckInText(r),
+        r.checkedInAt || '',
+        r.cancelledAt || '',
+        r.remark || '',
+      ]),
+    )
+    if (rows.length >= EXPORT_MAX_ROWS) {
+      ElMessage.warning(`仅导出前 ${EXPORT_MAX_ROWS} 条，请缩小筛选范围`)
+    }
+  } catch (e) {
+    showApiError(e, '导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 </script>
 
@@ -221,11 +357,25 @@ function onCheckInClick(tab: SignupTab) {
   color: var(--el-color-primary);
 }
 
+.signup-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+}
+
 .signup-checkin {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 10px;
+}
+
+.signup-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .signup-checkin__chip {

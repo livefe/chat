@@ -35,6 +35,8 @@ func registerPostRoutes(engine *gin.Engine, h *container.Handlers) {
 		admin.GET("/map", ph.AdminMap)
 		admin.GET("/detail", ph.AdminDetail)
 		admin.GET("/signup/list", ph.AdminSignupList)
+		admin.GET("/signup/by-user", ph.AdminUserSignupList)
 		admin.POST("/update/status", ph.AdminUpdateStatus)
+		admin.POST("/batch/status", ph.AdminBatchUpdateStatus)
 	}
 }

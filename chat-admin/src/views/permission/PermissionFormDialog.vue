@@ -6,10 +6,17 @@
     destroy-on-close
     :close-on-click-modal="false"
   >
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      class="perm-hint"
+      :title="PERMISSION_MODEL_HINT"
+    />
     <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
       <el-form-item label="类型" prop="type">
-        <el-radio-group v-model="form.type">
-          <el-radio-button v-for="t in permissionTypeOptions" :key="t.value" :label="t.value">
+        <el-radio-group v-model="form.type" :disabled="apiPathLocked">
+          <el-radio-button v-for="t in permissionTypeOptions" :key="t.value" :value="t.value">
             {{ t.label }}
           </el-radio-button>
         </el-radio-group>
@@ -28,24 +35,23 @@
           node-key="id"
           check-strictly
           default-expand-all
+          filterable
           :render-after-expand="false"
           placeholder="请选择父级（空为顶级）"
-          clearable
           style="width: 100%"
         />
         <div class="form-tip">
           {{
             form.type === PermissionType.Menu
               ? '菜单可选顶级或其他菜单作为父级'
-              : '按钮/接口建议挂到所属菜单下'
+              : '按钮、接口挂到所属菜单下；只读接口用菜单编码，写接口用按钮编码'
           }}
         </div>
       </el-form-item>
       <el-form-item
+        v-if="form.type !== PermissionType.Button"
         label="路径"
-        :prop="
-          form.type === PermissionType.Menu || form.type === PermissionType.API ? 'path' : undefined
-        "
+        :prop="form.type === PermissionType.API ? 'path' : undefined"
       >
         <el-input
           v-model="form.path"
@@ -110,8 +116,8 @@
       </el-form-item>
       <el-form-item label="状态">
         <el-radio-group v-model="form.status">
-          <el-radio :label="1">启用</el-radio>
-          <el-radio :label="0">禁用</el-radio>
+          <el-radio :value="1">启用</el-radio>
+          <el-radio :value="0">禁用</el-radio>
         </el-radio-group>
       </el-form-item>
     </el-form>
@@ -129,7 +135,6 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
   createPermission,
-  getPermissionTree,
   updatePermission,
   type PermissionItem,
   type PermissionTreeItem,
@@ -138,15 +143,21 @@ import { ADMIN_ICON_NAMES } from '@/constants/adminIcons'
 import { PermissionType } from '@/constants/permission'
 import { componentMap } from '@/router/routes'
 import { showApiError } from '@/utils/apiError'
-import { HTTP_METHODS, permissionTypeOptions } from '@/utils/permission'
+import { HTTP_METHODS, PERMISSION_MODEL_HINT, permissionTypeOptions } from '@/utils/permission'
 
+interface ParentOption {
+  id: number
+  name: string
+  children?: ParentOption[]
+}
+
+const props = defineProps<{ tree: PermissionTreeItem[] }>()
 const emit = defineEmits<{ success: [] }>()
 
 const componentOptions = Object.keys(componentMap).sort()
 
 const visible = ref(false)
 const saving = ref(false)
-const fullTree = ref<PermissionTreeItem[]>([])
 const formRef = ref<FormInstance>()
 
 function emptyForm() {
@@ -199,42 +210,29 @@ const codePlaceholder = computed(() => {
       return '如：user:account'
     case PermissionType.Button:
       return '如：user:account:create'
-    case PermissionType.API:
-      return '只读用菜单码如 user:account；写操作用按钮码如 user:account:create'
     default:
-      return '如：data:own'
+      return '只读用菜单编码如 user:account；写操作用按钮编码如 user:account:create'
   }
 })
 
 const apiPathLocked = computed(() => form.id > 0 && form.type === PermissionType.API)
 
-const parentTreeData = computed(() => {
-  const root: PermissionTreeItem[] = [
-    { id: 0, name: '顶级（无父级）', code: '', type: 0, parentId: 0, sort: 0, children: [] },
-  ]
-  return root.concat(buildParentTree(fullTree.value, form.id))
-})
+const parentTreeData = computed<ParentOption[]>(() => [
+  { id: 0, name: '顶级（无父级）' },
+  ...buildParentTree(props.tree, form.id),
+])
 
-function buildParentTree(nodes: PermissionTreeItem[], excludeId: number): PermissionTreeItem[] {
-  const out: PermissionTreeItem[] = []
+function buildParentTree(nodes: PermissionTreeItem[], excludeId: number): ParentOption[] {
+  const out: ParentOption[] = []
   for (const n of nodes) {
-    if (n.id === excludeId) continue
-    if (n.type !== PermissionType.Menu) continue
+    if (n.id === excludeId || n.type !== PermissionType.Menu) continue
     out.push({
-      ...n,
-      children: n.children ? buildParentTree(n.children, excludeId) : [],
+      id: n.id,
+      name: n.name,
+      children: n.children ? buildParentTree(n.children, excludeId) : undefined,
     })
   }
   return out
-}
-
-async function fetchTree() {
-  try {
-    const { data } = await getPermissionTree()
-    fullTree.value = data
-  } catch (e) {
-    showApiError(e, '获取权限树失败')
-  }
 }
 
 watch(
@@ -242,6 +240,7 @@ watch(
   (t, old) => {
     if (t === old) return
     if (t !== PermissionType.API) form.method = ''
+    if (t === PermissionType.Button) form.path = ''
     if (t !== PermissionType.Menu) {
       form.icon = ''
       form.component = ''
@@ -250,14 +249,17 @@ watch(
   },
 )
 
-async function openCreate() {
-  await fetchTree()
+function openCreate(parent?: PermissionItem) {
   Object.assign(form, emptyForm())
+  if (parent) {
+    form.parentId = parent.id
+    form.type = PermissionType.Button
+    form.code = `${parent.code}:`
+  }
   visible.value = true
 }
 
-async function openEdit(row: PermissionItem) {
-  await fetchTree()
+function openEdit(row: PermissionItem) {
   Object.assign(form, {
     id: row.id,
     name: row.name,
@@ -278,16 +280,20 @@ async function openEdit(row: PermissionItem) {
 
 async function handleSubmit() {
   if (!formRef.value) return
-  await formRef.value.validate()
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   saving.value = true
   try {
     if (form.id) await updatePermission(form)
     else await createPermission(form)
-    ElMessage.success('操作成功')
+    ElMessage.success(form.id ? '已保存' : '已新增')
     visible.value = false
     emit('success')
   } catch (e) {
-    showApiError(e, '操作失败')
+    showApiError(e, '保存失败')
   } finally {
     saving.value = false
   }
@@ -297,6 +303,10 @@ defineExpose({ openCreate, openEdit })
 </script>
 
 <style scoped>
+.perm-hint {
+  margin-bottom: 16px;
+}
+
 .perm-icon-option {
   display: inline-flex;
   align-items: center;

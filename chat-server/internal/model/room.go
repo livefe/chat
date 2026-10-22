@@ -38,6 +38,9 @@ type Room struct {
 	Radius          uint           `gorm:"type:int unsigned;not null;default:0;comment:半径(米),多边形=外接圆半径" json:"radius"`
 	Polygon         datatypes.JSON `gorm:"type:json;comment:多边形顶点[[lng,lat],...]" json:"polygon,omitempty"`
 	RequireGeofence bool           `gorm:"type:tinyint(1);not null;default:0;comment:是否限制仅在地理围栏内可聊天" json:"requireGeofence"`
+	AuditRemark     string         `gorm:"type:varchar(200);not null;default:'';comment:驳回原因" json:"auditRemark"`
+	AuditedBy       uint           `gorm:"type:int unsigned;not null;default:0;comment:最近审核员工ID" json:"auditedBy"`
+	AuditedAt       int64          `gorm:"type:bigint;not null;default:0;comment:最近审核时间(秒)" json:"auditedAt"`
 }
 
 func (Room) TableName() string { return "chat_room" }

@@ -82,7 +82,7 @@ import { ElMessage } from 'element-plus'
 import { getPostMap, type PostMapIndependentItem, type PostMapRoomItem } from '@/api/post'
 import PanoramaMapShell from '@/components/PanoramaMapShell.vue'
 import { usePanoramaMap } from '@/composables/usePanoramaMap'
-import { POST_CATEGORY_OPTIONS, POST_STATUS_OPTIONS, PostStatus } from '@/constants/post'
+import { POST_CATEGORY_OPTIONS, POST_STATUS_OPTIONS } from '@/constants/post'
 import { showApiError } from '@/utils/apiError'
 import { hasCoordinates, wgs84ToGcj02 } from '@/utils/geo'
 import {
@@ -117,7 +117,7 @@ const rooms = ref<PostMapRoomItem[]>([])
 const independent = ref<PostMapIndependentItem[]>([])
 const selectedRoom = ref<PostMapRoomItem | null>(null)
 const selectedCluster = ref<IndepCluster | null>(null)
-const filterStatus = ref<number | undefined>(PostStatus.Published)
+const filterStatus = ref<number | undefined>(undefined)
 const filterCategory = ref<string | undefined>(undefined)
 
 const { mapError, ensureMap, paint, openInfo, fitAll } = usePanoramaMap({

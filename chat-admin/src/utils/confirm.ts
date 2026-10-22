@@ -13,11 +13,13 @@ export async function confirmAndRun(
 ) {
   try {
     await ElMessageBox.confirm(message, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
     await action()
     ElMessage.success(successMessage)
   } catch (e: unknown) {
-    if (e !== 'cancel') {
-      showApiError(e, '操作失败')
-    }
+    showApiError(e, '操作失败')
   }
 }

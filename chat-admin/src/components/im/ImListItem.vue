@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { imInitials } from './media'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     title: string
     subtitle?: string
@@ -23,18 +23,25 @@ withDefaults(
   },
 )
 
-defineEmits<{
+const emit = defineEmits<{
   click: []
 }>()
+
+function activate() {
+  if (!props.disabled) emit('click')
+}
 </script>
 
 <template>
-  <button
-    type="button"
+  <div
+    role="button"
+    :tabindex="disabled ? -1 : 0"
+    :aria-disabled="disabled"
     class="im-list-item"
-    :class="{ 'is-active': active }"
-    :disabled="disabled"
-    @click="$emit('click')"
+    :class="{ 'is-active': active, 'is-disabled': disabled }"
+    @click="activate"
+    @keydown.enter.prevent="activate"
+    @keydown.space.prevent="activate"
   >
     <div class="im-list-item__avatar">
       <el-avatar :size="40" :src="avatarUrl || undefined">{{ imInitials(title) }}</el-avatar>
@@ -53,8 +60,8 @@ defineEmits<{
         <el-badge v-if="unread > 0" :value="unread" :max="99" />
       </div>
     </div>
-    <div v-if="$slots.action" class="im-list-item__action" @click.stop>
+    <div v-if="$slots.action" class="im-list-item__action" @click.stop @keydown.stop>
       <slot name="action" />
     </div>
-  </button>
+  </div>
 </template>

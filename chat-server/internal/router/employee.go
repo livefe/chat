@@ -22,7 +22,8 @@ func registerEmployeeRoutes(engine *gin.Engine, h *container.Handlers) {
 		auth.POST("/create", eh.Create)
 		auth.POST("/update", eh.Update)
 		auth.POST("/update/status", eh.UpdateStatus)
-		auth.GET("/roles", eh.GetRoles)
+		auth.GET("/role-options", eh.RoleOptions)
 		auth.POST("/assign/roles", eh.AssignRoles)
+		auth.GET("/login-records", eh.LoginRecords)
 	}
 }

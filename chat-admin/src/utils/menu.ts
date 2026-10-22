@@ -116,6 +116,32 @@ export function buildHomeSections(permissions: PermissionItem[]): HomeSection[] 
   return sections.filter((s) => s.items.length > 0)
 }
 
+/** 按标题过滤菜单：命中的分组保留全部子项，未命中的分组只保留命中的子项。 */
+export function filterMenus(menus: MenuItem[], keyword: string): MenuItem[] {
+  const kw = keyword.trim().toLowerCase()
+  if (!kw) return menus
+  const out: MenuItem[] = []
+  for (const m of menus) {
+    if (m.title.toLowerCase().includes(kw)) {
+      out.push(m)
+      continue
+    }
+    const children = m.children ? filterMenus(m.children, kw) : []
+    if (children.length) out.push({ ...m, children })
+  }
+  return out
+}
+
+/** 可导航的叶子菜单（按展示顺序）。 */
+export function flattenMenuLeaves(menus: MenuItem[]): MenuItem[] {
+  const out: MenuItem[] = []
+  for (const m of menus) {
+    if (m.children?.length) out.push(...flattenMenuLeaves(m.children))
+    else if (m.path) out.push(m)
+  }
+  return out
+}
+
 export function findMenuTrail(menus: MenuItem[], path: string): MenuItem[] {
   function walk(nodes: MenuItem[], trail: MenuItem[]): MenuItem[] | null {
     for (const node of nodes) {

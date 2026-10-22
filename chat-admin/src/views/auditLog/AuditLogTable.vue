@@ -1,25 +1,35 @@
 <template>
-  <el-table :data="list" v-loading="loading" empty-text="暂无审计日志">
-    <el-table-column prop="id" label="ID" width="80" />
-    <el-table-column label="操作人" min-width="140">
+  <el-table :data="list" v-loading="loading">
+    <template #empty>
+      <TableEmpty :error="error" text="暂无审计记录" @retry="emit('page-change')" />
+    </template>
+    <el-table-column label="操作人" min-width="150">
       <template #default="{ row }">
-        <div>{{ row.employeeName || '-' }}</div>
+        <el-link type="primary" :underline="false" @click="emit('filter-employee', row.employeeId)">
+          {{ row.employeeName || '-' }}
+        </el-link>
         <div class="sub">{{ row.employeeMobile }} · ID {{ row.employeeId }}</div>
       </template>
     </el-table-column>
-    <el-table-column prop="moduleText" label="模块" width="110" />
-    <el-table-column prop="actionText" label="操作" width="130" />
-    <el-table-column label="结果" width="80">
+    <el-table-column label="操作" min-width="160">
       <template #default="{ row }">
-        <el-tag :type="row.success ? 'success' : 'danger'" size="small">
-          {{ row.successText || (row.success ? '成功' : '失败') }}
-        </el-tag>
+        <div>{{ row.actionText }}</div>
+        <div class="sub">{{ row.moduleText }}</div>
       </template>
     </el-table-column>
-    <el-table-column label="目标" min-width="160">
+    <el-table-column label="结果" width="90">
+      <template #default="{ row }">
+        <el-tooltip :disabled="row.success || !row.resultMessage" :content="row.resultMessage">
+          <el-tag :type="row.success ? 'success' : 'danger'" size="small">
+            {{ row.successText }}
+          </el-tag>
+        </el-tooltip>
+      </template>
+    </el-table-column>
+    <el-table-column label="对象" min-width="200">
       <template #default="{ row }">
         <div>{{ row.targetLabel || '-' }}</div>
-        <div v-if="row.targetType" class="sub">{{ row.targetType }}</div>
+        <div v-if="row.targetTypeText" class="sub">{{ row.targetTypeText }}</div>
       </template>
     </el-table-column>
     <el-table-column prop="ip" label="IP" width="130" />
@@ -56,6 +66,7 @@
 
 <script setup lang="ts">
 import type { AuditLogItem } from '@/api/auditLog'
+import TableEmpty from '@/components/common/TableEmpty.vue'
 import { usePermission } from '@/composables/usePermission'
 import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
 import { PERM } from '@/constants/permission'
@@ -63,6 +74,7 @@ import { PERM } from '@/constants/permission'
 defineProps<{
   list: AuditLogItem[]
   loading: boolean
+  error?: boolean
   total: number
 }>()
 
@@ -71,6 +83,7 @@ const pageSize = defineModel<number>('pageSize', { required: true })
 
 const emit = defineEmits<{
   detail: [row: AuditLogItem]
+  'filter-employee': [employeeId: number]
   'page-change': []
 }>()
 

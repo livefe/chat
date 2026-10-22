@@ -10,38 +10,49 @@
         </div>
       </template>
 
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="perm-model-hint"
+        :title="PERMISSION_MODEL_HINT"
+      />
+
       <PermissionFilter
-        v-model:name="query.name"
-        v-model:type="query.type"
-        v-model:status="query.status"
-        @search="handleSearch"
+        v-model:keyword="filter.keyword"
+        v-model:type="filter.type"
+        v-model:status="filter.status"
+        @search="applyFilter"
         @reset="handleReset"
       />
 
       <PermissionTable
-        :list="list"
+        :data="displayTree"
         :loading="loading"
-        :total="total"
-        v-model:page="query.page"
-        v-model:page-size="query.pageSize"
+        :error="loadError"
+        :expand-all="isFiltering"
+        :table-key="tableKey"
+        @retry="fetchTree"
+        @add-child="(row) => formRef?.openCreate(row)"
         @edit="(row) => formRef?.openEdit(row)"
         @delete="handleDelete"
-        @page-change="fetchList"
       />
     </el-card>
 
-    <PermissionFormDialog ref="formRef" @success="fetchList" />
+    <PermissionFormDialog ref="formRef" :tree="allTree" @success="fetchTree" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { deletePermission, getPermissionList, type PermissionItem } from '@/api/permission'
-import { usePaginatedList } from '@/composables/usePaginatedList'
+import { ElMessage } from 'element-plus'
+import { deletePermission, getPermissionTree, type PermissionTreeItem } from '@/api/permission'
 import { usePermission } from '@/composables/usePermission'
 import { PERM } from '@/constants/permission'
+import { showApiError } from '@/utils/apiError'
 import { confirmAndRun } from '@/utils/confirm'
+import { PERMISSION_MODEL_HINT } from '@/utils/permission'
 import PermissionFilter from './PermissionFilter.vue'
 import PermissionFormDialog from './PermissionFormDialog.vue'
 import PermissionTable from './PermissionTable.vue'
@@ -50,28 +61,94 @@ const { can } = usePermission()
 const route = useRoute()
 const formRef = ref<InstanceType<typeof PermissionFormDialog>>()
 
-const { loading, list, total, query, fetchList, handleSearch, handleReset } = usePaginatedList(
-  getPermissionList,
-  {
-    page: 1,
-    pageSize: 10,
-    name: '',
-    type: undefined as number | undefined,
-    status: undefined as number | undefined,
-  },
-  '获取权限列表失败',
+const loading = ref(false)
+const loadError = ref(false)
+const allTree = ref<PermissionTreeItem[]>([])
+
+interface PermissionFilterState {
+  keyword: string
+  type?: number
+  status?: number
+}
+
+const filter = reactive<PermissionFilterState>({ keyword: '' })
+const active = reactive<PermissionFilterState>({ keyword: '' })
+
+const isFiltering = computed(
+  () => !!active.keyword.trim() || active.type !== undefined || active.status !== undefined,
 )
 
-async function handleDelete(row: PermissionItem) {
+function matches(n: PermissionTreeItem) {
+  const kw = active.keyword.trim().toLowerCase()
+  if (kw && !n.name.toLowerCase().includes(kw) && !n.code.toLowerCase().includes(kw)) {
+    return false
+  }
+  if (active.type !== undefined && n.type !== active.type) return false
+  if (active.status !== undefined && n.status !== active.status) return false
+  return true
+}
+
+function filterTree(nodes: PermissionTreeItem[]): PermissionTreeItem[] {
+  const out: PermissionTreeItem[] = []
+  for (const n of nodes) {
+    const children = filterTree(n.children || [])
+    if (matches(n) || children.length) {
+      out.push({ ...n, children: children.length ? children : undefined })
+    }
+  }
+  return out
+}
+
+const displayTree = computed(() => (isFiltering.value ? filterTree(allTree.value) : allTree.value))
+
+const tableKey = computed(
+  () => `${active.keyword}|${active.type ?? ''}|${active.status ?? ''}|${allTree.value.length}`,
+)
+
+async function fetchTree() {
+  loading.value = true
+  loadError.value = false
+  try {
+    const { data } = await getPermissionTree()
+    allTree.value = data
+  } catch (e) {
+    allTree.value = []
+    loadError.value = true
+    showApiError(e, '获取权限失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function applyFilter() {
+  Object.assign(active, filter)
+}
+
+function handleReset() {
+  Object.assign(filter, { keyword: '', type: undefined, status: undefined })
+  applyFilter()
+}
+
+async function handleDelete(row: PermissionTreeItem) {
+  if (row.children?.length) {
+    ElMessage.warning(`「${row.name}」下还有 ${row.children.length} 个子权限，请先删除子权限`)
+    return
+  }
   await confirmAndRun(
-    '确定要删除该权限吗？',
+    `确定删除权限「${row.name}」（${row.code}）吗？已被角色引用的权限无法删除，请先从角色中移除。`,
     async () => {
       await deletePermission(row.id)
-      fetchList()
+      await fetchTree()
     },
-    '删除成功',
+    '已删除',
   )
 }
 
-onMounted(fetchList)
+onMounted(fetchTree)
 </script>
+
+<style scoped>
+.perm-model-hint {
+  margin-bottom: 16px;
+}
+</style>

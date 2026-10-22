@@ -1,5 +1,9 @@
 package types
 
+const CacheSensitiveWordReloadChannel = cachePrefix + "sensitive_word:reload"
+
+const SensitiveWordMaxLen = 64
+
 type SensitiveWordListRequest struct {
 	Word     string `form:"word"`
 	Category string `form:"category"`
@@ -13,10 +17,6 @@ type SensitiveWordItem struct {
 	Word         string `json:"word"`
 	Category     string `json:"category"`
 	CategoryText string `json:"categoryText"`
-	Level        uint8  `json:"level"`
-	LevelText    string `json:"levelText"`
-	Action       uint8  `json:"action"`
-	ActionText   string `json:"actionText"`
 	Status       uint8  `json:"status"`
 	StatusText   string `json:"statusText"`
 	Remark       string `json:"remark"`
@@ -31,9 +31,7 @@ type SensitiveWordListResponse struct {
 
 type CreateSensitiveWordRequest struct {
 	Word     string `json:"word" binding:"required,max=64"`
-	Category string `json:"category" binding:"omitempty,max=32"`
-	Level    uint8  `json:"level" binding:"required,oneof=1 2 3"`
-	Action   uint8  `json:"action" binding:"required,oneof=1"`
+	Category string `json:"category" binding:"required,max=32"`
 	Status   uint8  `json:"status" binding:"oneof=0 1"`
 	Remark   string `json:"remark" binding:"omitempty,max=255"`
 }
@@ -48,13 +46,25 @@ type UpdateSensitiveWordStatusRequest struct {
 	Status uint8 `json:"status" binding:"oneof=0 1"`
 }
 
-type ImportSensitiveWordsRequest struct {
-	Words    string `json:"words" binding:"required"`
-	Category string `json:"category" binding:"omitempty,max=32"`
-	Level    uint8  `json:"level" binding:"required,oneof=1 2 3"`
+type BatchSensitiveWordRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1,max=500,dive,required"`
 }
 
+type BatchSensitiveWordStatusRequest struct {
+	IDs    []uint `json:"ids" binding:"required,min=1,max=500,dive,required"`
+	Status uint8  `json:"status" binding:"oneof=0 1"`
+}
+
+type ImportSensitiveWordsRequest struct {
+	Words    string `json:"words" binding:"required"`
+	Category string `json:"category" binding:"required,max=32"`
+}
+
+// 跳过的词按原因分组返回，便于管理员核对。
 type ImportSensitiveWordsResponse struct {
-	Created int `json:"created"`
-	Skipped int `json:"skipped"`
+	Created    int      `json:"created"`
+	Existing   []string `json:"existing"`
+	TooLong    []string `json:"tooLong"`
+	Duplicated []string `json:"duplicated"`
+	Invalid    []string `json:"invalid"`
 }

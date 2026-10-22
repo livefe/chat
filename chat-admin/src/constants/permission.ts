@@ -2,10 +2,10 @@ export const PermissionType = {
   Menu: 1,
   Button: 2,
   API: 3,
-  Data: 4,
 } as const
 
 export const PERM = {
+  AdCampaignAudit: 'ad:campaign:audit',
   AdCampaignCopy: 'ad:campaign:copy',
   AdCampaignPause: 'ad:campaign:pause',
   AdCampaignStats: 'ad:campaign:stats',
@@ -13,6 +13,7 @@ export const PERM = {
   AdCampaignUpdate: 'ad:campaign:update',
   AdSettingUpdate: 'ad:setting:update',
 
+  ChatConversation: 'chat:conversation',
   ChatMessage: 'chat:message',
   ChatMessageContext: 'chat:message:context',
   ChatMessageDelete: 'chat:message:delete',
@@ -35,11 +36,13 @@ export const PERM = {
   ImSupportOverview: 'im:support_overview',
   ImSupportOverviewConfig: 'im:support_overview:config',
 
+  OpsAppReleaseDelete: 'ops:app_release:delete',
   OpsAppReleaseDisable: 'ops:app_release:disable',
   OpsAppReleaseEnable: 'ops:app_release:enable',
   OpsAppReleasePolicy: 'ops:app_release:policy',
   OpsAppReleasePublish: 'ops:app_release:publish',
   OpsAppReleaseUpload: 'ops:app_release:upload',
+  OpsAuditLog: 'ops:audit_log',
   OpsAuditLogDetail: 'ops:audit_log:detail',
   OpsRegionDetail: 'ops:region:detail',
   OpsSensitiveWordCreate: 'ops:sensitive_word:create',

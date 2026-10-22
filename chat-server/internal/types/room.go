@@ -34,6 +34,7 @@ type RoomItem struct {
 	Status          uint8   `json:"status"`
 	StatusText      string  `json:"statusText"`
 	RequireGeofence bool    `json:"requireGeofence"`
+	AuditRemark     string  `json:"auditRemark,omitempty"`
 	CreatedAt       string  `json:"createdAt"`
 	UpdatedAt       string  `json:"updatedAt"`
 }
@@ -41,6 +42,27 @@ type RoomItem struct {
 type RoomDetail struct {
 	RoomItem
 	Polygon [][2]float64 `json:"polygon,omitempty"`
+}
+
+type AdminRoomItem struct {
+	RoomItem
+	CreatorNickname string `json:"creatorNickname"`
+	CreatorMobile   string `json:"creatorMobile"`
+	EmployeeName    string `json:"employeeName"`
+	PostCount       int64  `json:"postCount"`
+	MessageCount    int64  `json:"messageCount"`
+	AuditedByName   string `json:"auditedByName"`
+	AuditedAt       string `json:"auditedAt"`
+}
+
+type AdminRoomDetail struct {
+	AdminRoomItem
+	Polygon [][2]float64 `json:"polygon,omitempty"`
+}
+
+type AdminRoomListResponse struct {
+	Total int64           `json:"total"`
+	List  []AdminRoomItem `json:"list"`
 }
 
 type NearbyRoomItem struct {
@@ -86,7 +108,8 @@ type RoomBootstrapResponse struct {
 
 type RoomListRequest struct {
 	ID        *uint  `form:"id"`
-	Name      string `form:"name"`
+	UserID    *uint  `form:"userId"`
+	Name      string `form:"name" binding:"max=64"`
 	Status    *uint8 `form:"status"`
 	Source    *uint8 `form:"source"`
 	PlaceType *uint8 `form:"placeType"`
@@ -105,13 +128,20 @@ type UpdateRoomRequest struct {
 }
 
 type AuditRoomRequest struct {
-	ID      uint `json:"id" binding:"required"`
-	Approve bool `json:"approve"`
+	ID      uint   `json:"id" binding:"required"`
+	Approve bool   `json:"approve"`
+	Reason  string `json:"reason" binding:"max=200"`
+}
+
+type BatchAuditRoomRequest struct {
+	IDs     []uint `json:"ids" binding:"required,min=1,max=100"`
+	Approve bool   `json:"approve"`
+	Reason  string `json:"reason" binding:"max=200"`
 }
 
 type UpdateRoomStatusRequest struct {
 	ID     uint  `json:"id" binding:"required"`
-	Status uint8 `json:"status" binding:"oneof=0 1 2 3"`
+	Status uint8 `json:"status" binding:"oneof=1 3"`
 }
 
 type AdminUserRoomSummary struct {

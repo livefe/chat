@@ -16,6 +16,7 @@ import (
 	"app/pkg/errs"
 	"app/pkg/logger"
 	"app/pkg/push"
+	"app/pkg/utils"
 )
 
 type DeviceService struct {
@@ -84,6 +85,29 @@ func (s *DeviceService) DeleteByUserID(ctx context.Context, userID uint) error {
 		return nil
 	}
 	return s.deviceRepo.DeleteByUserID(ctx, userID)
+}
+
+func (s *DeviceService) AdminListByUser(ctx context.Context, req *types.AdminUserSubListRequest) (*types.AdminDeviceListResponse, error) {
+	rows, total, err := s.deviceRepo.ListByUserID(ctx, req.UserID, req.Page, req.PageSize)
+	if err != nil {
+		s.log.Error(ctx, "查询用户设备失败", logger.Uint("user_id", req.UserID), logger.Error(err))
+		return nil, fmt.Errorf("查询用户设备失败: %w", err)
+	}
+	list := make([]types.AdminDeviceItem, 0, len(rows))
+	for _, d := range rows {
+		list = append(list, types.AdminDeviceItem{
+			ID:           d.ID,
+			DeviceID:     d.DeviceID,
+			Platform:     d.Platform,
+			Vendor:       d.Vendor,
+			AppVersion:   d.AppVersion,
+			OSVersion:    d.OSVersion,
+			PushEnabled:  d.PushEnabled,
+			LastActiveAt: d.LastActiveAt,
+			CreatedAt:    utils.FormatDateTime(d.CreatedAt),
+		})
+	}
+	return &types.AdminDeviceListResponse{Total: total, List: list}, nil
 }
 
 func (s *DeviceService) NotifyPrivateOffline(ctx context.Context, toUserID uint, item *types.MessageItem) {

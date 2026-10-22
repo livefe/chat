@@ -1,32 +1,39 @@
 <template>
-  <el-dialog v-model="visible" :title="title" width="420px" destroy-on-close>
+  <el-dialog v-model="visible" :title="title" width="440px" destroy-on-close>
     <el-select
       v-model="toId"
       filterable
-      placeholder="选择同事"
+      placeholder="选择坐席"
       style="width: 100%"
-      :loading="loading"
+      :loading="agentsLoading"
+      no-data-text="暂无可转接的坐席"
     >
-      <el-option
-        v-for="c in contacts"
-        :key="c.id"
-        :label="`${c.name}（#${c.id}）${c.departmentName ? ' · ' + c.departmentName : ''}`"
-        :value="c.id"
-      />
+      <el-option v-for="a in candidates" :key="a.id" :label="`${a.name}（#${a.id}）`" :value="a.id">
+        <span class="agent-option">
+          <span class="agent-option__dot" :class="{ 'is-online': a.online }" />
+          <span>{{ a.name }}（#{{ a.id }}）</span>
+          <span class="agent-option__sub">
+            {{ a.online ? '在线' : '离线' }}{{ a.departmentName ? ` · ${a.departmentName}` : '' }}
+          </span>
+        </span>
+      </el-option>
     </el-select>
+    <div v-if="selected && !selected.online" class="agent-warn">
+      {{ selected.name }} 当前不在线，转接后可能无法及时回复用户
+    </div>
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="confirm">确认转接</el-button>
+      <el-button type="primary" :loading="submitting" :disabled="!toId" @click="confirm">
+        确认转接
+      </el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { getImContacts, type ImContactItem } from '@/api/im'
+import { computed, ref, watch } from 'vue'
 import { transferSupport } from '@/api/support'
-import { isCancelAction } from '@/utils/confirm'
+import { useSupportAgents } from '@/composables/useSupportOverview'
 import { showApiError } from '@/utils/apiError'
 
 const props = defineProps<{
@@ -38,43 +45,24 @@ const props = defineProps<{
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ transferred: [] }>()
 
-const loading = ref(false)
+const { agents, agentsLoading, loadAgents } = useSupportAgents()
 const submitting = ref(false)
-const contacts = ref<ImContactItem[]>([])
 const toId = ref<number | undefined>()
 
-async function loadContacts() {
-  toId.value = undefined
-  loading.value = true
-  try {
-    const { data } = await getImContacts({ page: 1, pageSize: 200 })
-    const exclude = new Set(props.excludeIds)
-    contacts.value = (data.list || []).filter((c) => !exclude.has(c.id))
-    if (contacts.value.length === 0) {
-      ElMessage.warning('暂无可转接同事')
-      visible.value = false
-    }
-  } catch (e) {
-    showApiError(e, '加载同事失败')
-    visible.value = false
-  } finally {
-    loading.value = false
-  }
-}
+const candidates = computed(() => {
+  const exclude = new Set(props.excludeIds)
+  return agents.value.filter((a) => !exclude.has(a.id))
+})
+const selected = computed(() => candidates.value.find((a) => a.id === toId.value))
 
 async function confirm() {
-  if (!props.conversationId || !toId.value) {
-    ElMessage.warning('请选择转接对象')
-    return
-  }
+  if (!props.conversationId || !toId.value) return
   submitting.value = true
   try {
-    await ElMessageBox.confirm('确认转接该会话？', '转接')
     await transferSupport(props.conversationId, toId.value)
     visible.value = false
     emit('transferred')
   } catch (e) {
-    if (isCancelAction(e)) return
     showApiError(e, '转接失败')
   } finally {
     submitting.value = false
@@ -82,6 +70,38 @@ async function confirm() {
 }
 
 watch(visible, (open) => {
-  if (open) void loadContacts()
+  if (!open) return
+  toId.value = undefined
+  void loadAgents()
 })
 </script>
+
+<style scoped>
+.agent-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-option__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-text-color-placeholder);
+}
+
+.agent-option__dot.is-online {
+  background: var(--el-color-success);
+}
+
+.agent-option__sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.agent-warn {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--el-color-warning);
+}
+</style>

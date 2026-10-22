@@ -8,21 +8,33 @@ type SubmitReportRequest struct {
 	Images     []uint `json:"images"`
 }
 
+// AdminReportListRequest 只看待处理时按提交时间正序（先进先出），其余倒序。
 type AdminReportListRequest struct {
-	Status     *uint8 `form:"status"`
-	TargetType *uint8 `form:"targetType"`
-	Reason     *uint8 `form:"reason"`
-	Keyword    string `form:"keyword"`
-	Page       int    `form:"page" binding:"required,min=1"`
-	PageSize   int    `form:"pageSize" binding:"required,min=1,max=100"`
+	Status       *uint8 `form:"status"`
+	TargetType   *uint8 `form:"targetType"`
+	TargetID     uint   `form:"targetId"`
+	TargetUserID uint   `form:"targetUserId"`
+	ReporterID   uint   `form:"reporterId"`
+	Reason       *uint8 `form:"reason"`
+	Keyword      string `form:"keyword"`
+	StartTime    string `form:"startTime"`
+	EndTime      string `form:"endTime"`
+	Page         int    `form:"page" binding:"required,min=1"`
+	PageSize     int    `form:"pageSize" binding:"required,min=1,max=100"`
 }
 
+// AdminReportHandleRequest MuteDuration 为禁言小时数，-1 为永久；ResolveSameTarget 表示同对象的其它待处理举报一并按相同结果结案。
 type AdminReportHandleRequest struct {
-	ID           uint   `json:"id" binding:"required"`
-	Status       uint8  `json:"status" binding:"required,min=1,max=2"`
-	HandleResult string `json:"handleResult"`
-	Action       uint8  `json:"action" binding:"max=5"`
-	MuteHours    int    `json:"muteHours"`
+	ID                uint   `json:"id" binding:"required"`
+	Status            uint8  `json:"status" binding:"required,min=1,max=2"`
+	HandleResult      string `json:"handleResult" binding:"max=500"`
+	Action            uint8  `json:"action" binding:"max=5"`
+	MuteDuration      int    `json:"muteDuration" binding:"min=-1,max=87600"`
+	ResolveSameTarget bool   `json:"resolveSameTarget"`
+}
+
+type AdminReportHandleResult struct {
+	ResolvedCount int64 `json:"resolvedCount"`
 }
 
 type ReportContextSnapshot struct {
@@ -35,36 +47,39 @@ type ReportContextSnapshot struct {
 	MessageType    uint8    `json:"messageType,omitempty"`
 	Scope          uint8    `json:"scope,omitempty"`
 	RoomID         uint     `json:"roomId,omitempty"`
+	PostID         uint     `json:"postId,omitempty"`
 	PeerID         uint     `json:"peerId,omitempty"`
 	SentAt         string   `json:"sentAt,omitempty"`
 }
 
 type ReportItem struct {
-	ID                uint                  `json:"id"`
-	ReporterID        uint                  `json:"reporterId"`
-	ReporterNickname  string                `json:"reporterNickname,omitempty"`
-	ReporterMobile    string                `json:"reporterMobile,omitempty"`
-	TargetType        uint8                 `json:"targetType"`
-	TargetTypeText    string                `json:"targetTypeText"`
-	TargetID          uint                  `json:"targetId"`
-	TargetUserID      uint                  `json:"targetUserId"`
-	TargetUserName    string                `json:"targetUserName,omitempty"`
-	Reason            uint8                 `json:"reason"`
-	ReasonText        string                `json:"reasonText"`
-	Content           string                `json:"content"`
-	Images            []string              `json:"images"`
-	Context           ReportContextSnapshot `json:"context"`
-	Status            uint8                 `json:"status"`
-	StatusText        string                `json:"statusText"`
-	HandleResult      string                `json:"handleResult"`
-	HandleAction      uint8                 `json:"handleAction"`
-	HandleActionText  string                `json:"handleActionText"`
-	EmployeeID        uint                  `json:"employeeId"`
-	EmployeeName      string                `json:"employeeName,omitempty"`
-	HandledAt         string                `json:"handledAt"`
-	TargetReportCount int64                 `json:"targetReportCount,omitempty"`
-	CreatedAt         string                `json:"createdAt"`
-	UpdatedAt         string                `json:"updatedAt"`
+	ID                uint                   `json:"id"`
+	ReporterID        uint                   `json:"reporterId"`
+	ReporterNickname  string                 `json:"reporterNickname,omitempty"`
+	ReporterMobile    string                 `json:"reporterMobile,omitempty"`
+	TargetType        uint8                  `json:"targetType"`
+	TargetTypeText    string                 `json:"targetTypeText"`
+	TargetID          uint                   `json:"targetId"`
+	TargetUserID      uint                   `json:"targetUserId"`
+	TargetUserName    string                 `json:"targetUserName,omitempty"`
+	TargetUserMobile  string                 `json:"targetUserMobile,omitempty"`
+	TargetUser        *UserGovernanceSummary `json:"targetUser,omitempty"`
+	Reason            uint8                  `json:"reason"`
+	ReasonText        string                 `json:"reasonText"`
+	Content           string                 `json:"content"`
+	Images            []string               `json:"images"`
+	Context           ReportContextSnapshot  `json:"context"`
+	Status            uint8                  `json:"status"`
+	StatusText        string                 `json:"statusText"`
+	HandleResult      string                 `json:"handleResult"`
+	HandleAction      uint8                  `json:"handleAction"`
+	HandleActionText  string                 `json:"handleActionText"`
+	EmployeeID        uint                   `json:"employeeId"`
+	EmployeeName      string                 `json:"employeeName,omitempty"`
+	HandledAt         string                 `json:"handledAt"`
+	TargetReportCount int64                  `json:"targetReportCount,omitempty"`
+	CreatedAt         string                 `json:"createdAt"`
+	UpdatedAt         string                 `json:"updatedAt"`
 }
 
 type ReportListResponse struct {

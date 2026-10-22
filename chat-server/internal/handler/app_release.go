@@ -52,7 +52,7 @@ func (h *AppReleaseHandler) AdminList(c *gin.Context) {
 	if !bindQuery(c, &req) {
 		return
 	}
-	result, err := h.appReleaseSvc.AdminList(c.Request.Context(), req.Platform)
+	result, err := h.appReleaseSvc.AdminList(c.Request.Context(), &req)
 	if err != nil {
 		response.WriteError(c, err)
 		return
@@ -140,4 +140,16 @@ func (h *AppReleaseHandler) AdminUnsetCurrent(c *gin.Context) {
 		return
 	}
 	response.Success(c, "已下架", nil)
+}
+
+func (h *AppReleaseHandler) AdminDelete(c *gin.Context) {
+	var req types.IDRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := h.appReleaseSvc.AdminDelete(c.Request.Context(), req.ID); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "已删除", nil)
 }

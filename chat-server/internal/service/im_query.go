@@ -52,14 +52,11 @@ func (s *IMService) ListContacts(ctx context.Context, selfID uint, req *types.IM
 		})
 	}
 	depNames := s.departmentNames(ctx, depIDs)
-	var online map[uint]struct{}
-	if s.deliverer != nil {
-		ids := make([]uint, len(items))
-		for i := range items {
-			ids[i] = items[i].ID
-		}
-		online = s.deliverer.OnlineEmployees(ctx, ids)
+	ids := make([]uint, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
 	}
+	online := s.OnlineEmployees(ctx, ids)
 	for i := range items {
 		items[i].DepartmentName = depNames[items[i].DepartmentID]
 		if _, ok := online[items[i].ID]; ok {

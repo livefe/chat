@@ -105,7 +105,7 @@ func (h *MessageHandler) AdminMessageContext(c *gin.Context) {
 	if !bindQuery(c, &req) {
 		return
 	}
-	list, err := h.msgSvc.AdminGetContext(c.Request.Context(), req.ID, req.Limit)
+	list, err := h.msgSvc.AdminGetContext(c.Request.Context(), &req)
 	if err != nil {
 		response.WriteError(c, err)
 		return
@@ -113,14 +113,15 @@ func (h *MessageHandler) AdminMessageContext(c *gin.Context) {
 	response.Success(c, "", types.AdminMessageContextResponse{List: list})
 }
 
-func (h *MessageHandler) AdminMessageDelete(c *gin.Context) {
-	var req types.IDRequest
+func (h *MessageHandler) AdminMessageBatchDelete(c *gin.Context) {
+	var req types.AdminMessageDeleteRequest
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.msgSvc.AdminDelete(c.Request.Context(), req.ID); err != nil {
+	result, err := h.msgSvc.AdminDeleteMessages(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
 		response.WriteError(c, err)
 		return
 	}
-	response.Success(c, "删除成功", nil)
+	response.Success(c, "删除成功", result)
 }

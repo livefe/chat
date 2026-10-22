@@ -12,6 +12,8 @@ func registerAuditLogRoutes(engine *gin.Engine, h *container.Handlers) {
 	admin := engine.Group("/api/admin/audit", h.EmployeeAuth, h.RequirePermission)
 	{
 		admin.GET("/list", ah.List)
+		admin.GET("/options", ah.Options)
+		admin.GET("/employees", ah.EmployeeOptions)
 		admin.GET("/detail", ah.Detail)
 	}
 }

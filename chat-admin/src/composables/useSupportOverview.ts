@@ -1,7 +1,11 @@
 import { ref } from 'vue'
 
-import { getImContacts, type ImContactItem } from '@/api/im'
-import { getSupportOverviewSummary, type SupportAdminSession } from '@/api/support'
+import {
+  getSupportAgents,
+  getSupportOverviewSummary,
+  type SupportAgent,
+  type SupportOverviewParams,
+} from '@/api/support'
 import { showApiError } from '@/utils/apiError'
 
 export function useSupportOverviewSummary() {
@@ -23,67 +27,41 @@ export function useSupportOverviewSummary() {
   return { summary, loadSummary }
 }
 
-export function useSupportOverviewFilters() {
-  const keywordDraft = ref('')
-  const keyword = ref('')
-  const assigneeId = ref<number | undefined>()
-  const agentOptions = ref<ImContactItem[]>([])
-
-  function applyKeyword() {
-    keyword.value = keywordDraft.value.trim()
-  }
-
-  function listFilterParams() {
-    return {
-      assigneeEmployeeId: assigneeId.value || undefined,
-      keyword: keyword.value.trim() || undefined,
-    }
-  }
-
-  function filterQueue(list: SupportAdminSession[]) {
-    const kw = keyword.value.trim().toLowerCase()
-    if (!kw) return list
-    return list.filter((s) => {
-      const hay = `${s.userId} ${s.id} ${s.userMobile || ''} ${s.userNickname || ''}`.toLowerCase()
-      return hay.includes(kw)
-    })
-  }
-
-  function mergeAgentOptions(list: SupportAdminSession[]) {
-    const map = new Map(agentOptions.value.map((x) => [x.id, x]))
-    for (const s of list) {
-      if (!s.assigneeEmployeeId || map.has(s.assigneeEmployeeId)) continue
-      map.set(s.assigneeEmployeeId, {
-        id: s.assigneeEmployeeId,
-        name: s.assigneeName || `坐席#${s.assigneeEmployeeId}`,
-        avatarUrl: '',
-        departmentId: 0,
-        departmentName: '',
-        online: false,
-      })
-    }
-    agentOptions.value = [...map.values()].sort((a, b) => a.id - b.id)
-  }
+/** 可接待客服的坐席（带在线状态），用于转接与总览筛选。 */
+export function useSupportAgents() {
+  const agents = ref<SupportAgent[]>([])
+  const agentsLoading = ref(false)
 
   async function loadAgents() {
+    agentsLoading.value = true
     try {
-      const { data } = await getImContacts({ page: 1, pageSize: 200 })
-      const map = new Map(agentOptions.value.map((x) => [x.id, x]))
-      for (const c of data.list || []) map.set(c.id, c)
-      agentOptions.value = [...map.values()].sort((a, b) => a.id - b.id)
-    } catch {
-      return
+      const { data } = await getSupportAgents()
+      agents.value = [...(data.list || [])].sort(
+        (a, b) => Number(b.online) - Number(a.online) || a.id - b.id,
+      )
+    } catch (e) {
+      showApiError(e, '加载坐席失败')
+    } finally {
+      agentsLoading.value = false
     }
   }
 
+  return { agents, agentsLoading, loadAgents }
+}
+
+export interface SupportOverviewFilters {
+  keyword: string
+  assigneeId?: number
+  dateRange: [string, string] | null
+}
+
+export function overviewListParams(
+  f: SupportOverviewFilters,
+): Omit<SupportOverviewParams, 'page' | 'pageSize'> {
   return {
-    keywordDraft,
-    assigneeId,
-    agentOptions,
-    applyKeyword,
-    listFilterParams,
-    filterQueue,
-    mergeAgentOptions,
-    loadAgents,
+    keyword: f.keyword.trim() || undefined,
+    assigneeEmployeeId: f.assigneeId || undefined,
+    startDate: f.dateRange?.[0] || undefined,
+    endDate: f.dateRange?.[1] || undefined,
   }
 }

@@ -1,5 +1,5 @@
 import { ElMessage } from 'element-plus'
-import type { Router } from 'vue-router'
+import type { LocationQueryValue, Router } from 'vue-router'
 
 import type { PermissionItem } from '@/api/permission'
 import { PermissionType, type PermissionCode } from '@/constants/permission'
@@ -25,4 +25,18 @@ export function pushMenuRoute(
     return
   }
   router.push({ path, query })
+}
+
+/** 只接受站内路径作为登录后的回跳地址。 */
+export function safeRedirect(
+  raw: LocationQueryValue | LocationQueryValue[] | undefined,
+): string | undefined {
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) {
+    return undefined
+  }
+  if (value === '/login' || value.startsWith('/login?') || value.startsWith('/403')) {
+    return undefined
+  }
+  return value
 }

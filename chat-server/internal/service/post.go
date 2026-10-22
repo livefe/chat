@@ -10,18 +10,19 @@ import (
 )
 
 type PostService struct {
-	log        *logger.Logger
-	cache      *cache.Cache
-	postRepo   repository.PostRepository
-	extrasRepo repository.PostExtraRepository
-	signupRepo repository.PostSignupRepository
-	msgRepo    repository.MessageRepository
-	userSvc    *UserService
-	roomSvc    *RoomService
-	sensitive  *SensitiveWordService
-	mediaSvc   *MediaService
-	adSvc      *AdService
-	channels   postChannelNotifier
+	log          *logger.Logger
+	cache        *cache.Cache
+	postRepo     repository.PostRepository
+	extrasRepo   repository.PostExtraRepository
+	signupRepo   repository.PostSignupRepository
+	msgRepo      repository.MessageRepository
+	employeeRepo repository.EmployeeRepository
+	userSvc      *UserService
+	roomSvc      *RoomService
+	sensitive    *SensitiveWordService
+	mediaSvc     *MediaService
+	adSvc        *AdService
+	channels     postChannelNotifier
 }
 
 type postChannelNotifier interface {
@@ -35,6 +36,7 @@ func NewPostService(
 	extrasRepo repository.PostExtraRepository,
 	signupRepo repository.PostSignupRepository,
 	msgRepo repository.MessageRepository,
+	employeeRepo repository.EmployeeRepository,
 	userSvc *UserService,
 	roomSvc *RoomService,
 	mediaSvc *MediaService,
@@ -43,23 +45,39 @@ func NewPostService(
 	channels postChannelNotifier,
 ) *PostService {
 	return &PostService{
-		log:        log,
-		cache:      c,
-		postRepo:   postRepo,
-		extrasRepo: extrasRepo,
-		signupRepo: signupRepo,
-		msgRepo:    msgRepo,
-		userSvc:    userSvc,
-		roomSvc:    roomSvc,
-		mediaSvc:   mediaSvc,
-		sensitive:  sensitive,
-		adSvc:      adSvc,
-		channels:   channels,
+		log:          log,
+		cache:        c,
+		postRepo:     postRepo,
+		extrasRepo:   extrasRepo,
+		signupRepo:   signupRepo,
+		msgRepo:      msgRepo,
+		employeeRepo: employeeRepo,
+		userSvc:      userSvc,
+		roomSvc:      roomSvc,
+		mediaSvc:     mediaSvc,
+		sensitive:    sensitive,
+		adSvc:        adSvc,
+		channels:     channels,
 	}
+}
+
+var postStatusText = map[uint8]string{
+	model.PostStatusPending:   "待审核",
+	model.PostStatusPublished: "发布中",
+	model.PostStatusRejected:  "驳回",
+	model.PostStatusDisabled:  "下架",
 }
 
 func postPublished(p *model.Post) bool {
 	return p != nil && p.Status == model.PostStatusPublished
+}
+
+// ownerAuditRemark 只在驳回/下架时把审核说明返回给作者本人。
+func ownerAuditRemark(p *model.Post) string {
+	if p.Status == model.PostStatusRejected || p.Status == model.PostStatusDisabled {
+		return p.AuditRemark
+	}
+	return ""
 }
 
 func (s *PostService) closePostChannel(ctx context.Context, postID uint, reason string) {

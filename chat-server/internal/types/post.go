@@ -58,13 +58,33 @@ type UserPostListRequest struct {
 }
 
 type AdminPostListRequest struct {
-	Status   *uint8 `form:"status"`
-	UserID   *uint  `form:"userId"`
-	RoomID   *uint  `form:"roomId"`
-	Category string `form:"category"`
-	Keyword  string `form:"keyword"`
-	Page     int    `form:"page" binding:"required,min=1"`
-	PageSize int    `form:"pageSize" binding:"required,min=1,max=100"`
+	ID               *uint  `form:"id"`
+	PublisherID      *uint  `form:"publisherId"`
+	PublisherKeyword string `form:"publisherKeyword" binding:"max=32"`
+	RoomID           *uint  `form:"roomId"`
+	Category         string `form:"category"`
+	Status           *uint8 `form:"status"`
+	Keyword          string `form:"keyword" binding:"max=100"`
+	StartTime        string `form:"startTime" binding:"omitempty,datetime=2006-01-02 15:04:05"`
+	EndTime          string `form:"endTime" binding:"omitempty,datetime=2006-01-02 15:04:05"`
+	Sort             string `form:"sort" binding:"omitempty,oneof=asc desc"`
+	IncludeDeleted   bool   `form:"includeDeleted"`
+	Page             int    `form:"page" binding:"required,min=1"`
+	PageSize         int    `form:"pageSize" binding:"required,min=1,max=100"`
+}
+
+type AdminPostItem struct {
+	PostItem
+	PublisherMobile string `json:"publisherMobile"`
+	RoomName        string `json:"roomName"`
+	Deleted         bool   `json:"deleted"`
+	AuditedByName   string `json:"auditedByName"`
+	AuditedAt       string `json:"auditedAt"`
+}
+
+type AdminPostListResponse struct {
+	Total int64           `json:"total"`
+	List  []AdminPostItem `json:"list"`
 }
 
 type PostPublisher struct {
@@ -97,6 +117,7 @@ type PostItem struct {
 	SignupSummary       *PostSignupSummary  `json:"signupSummary,omitempty"`
 	MySignupStatus      uint8               `json:"mySignupStatus,omitempty"`
 	MyCheckedInAt       int64               `json:"myCheckedInAt,omitempty"`
+	AuditRemark         string              `json:"auditRemark,omitempty"`
 	CreatedAt           string              `json:"createdAt"`
 	UpdatedAt           string              `json:"updatedAt"`
 }
@@ -172,11 +193,40 @@ type PostSignupResult struct {
 }
 
 type AdminPostSignupListRequest struct {
-	PostID   uint   `form:"postId" binding:"required"`
-	Status   *uint8 `form:"status"`
-	CheckIn  *uint8 `form:"checkIn"`
-	Page     int    `form:"page" binding:"required,min=1"`
-	PageSize int    `form:"pageSize" binding:"required,min=1,max=100"`
+	PostID    uint   `form:"postId" binding:"required"`
+	Status    *uint8 `form:"status"`
+	CheckIn   *uint8 `form:"checkIn"`
+	UserID    *uint  `form:"userId"`
+	Keyword   string `form:"keyword" binding:"max=32"`
+	SortField string `form:"sortField" binding:"omitempty,oneof=createdAt checkedInAt"`
+	SortOrder string `form:"sortOrder" binding:"omitempty,oneof=asc desc"`
+	Page      int    `form:"page" binding:"required,min=1"`
+	PageSize  int    `form:"pageSize" binding:"required,min=1,max=100"`
+}
+
+type AdminUserSignupListRequest struct {
+	UserID   uint `form:"userId" binding:"required"`
+	Page     int  `form:"page" binding:"required,min=1"`
+	PageSize int  `form:"pageSize" binding:"required,min=1,max=100"`
+}
+
+type AdminUserSignupItem struct {
+	ID               uint   `json:"id"`
+	PostID           uint   `json:"postId"`
+	PostTitle        string `json:"postTitle"`
+	PostStatus       uint8  `json:"postStatus"`
+	PostStatusText   string `json:"postStatusText"`
+	SignupStatus     uint8  `json:"signupStatus"`
+	SignupStatusText string `json:"signupStatusText"`
+	CheckedIn        bool   `json:"checkedIn"`
+	CheckedInAt      string `json:"checkedInAt"`
+	CancelledAt      string `json:"cancelledAt"`
+	CreatedAt        string `json:"createdAt"`
+}
+
+type AdminUserSignupListResponse struct {
+	Total int64                 `json:"total"`
+	List  []AdminUserSignupItem `json:"list"`
 }
 
 type AdminPostSignupItem struct {
@@ -215,8 +265,20 @@ type AdminPostSignupListResponse struct {
 }
 
 type UpdatePostStatusRequest struct {
-	ID     uint  `json:"id" binding:"required"`
-	Status uint8 `json:"status" binding:"required,oneof=0 1 2 3"`
+	ID     uint   `json:"id" binding:"required"`
+	Status uint8  `json:"status" binding:"oneof=1 2 3"`
+	Reason string `json:"reason" binding:"max=200"`
+}
+
+type BatchUpdatePostStatusRequest struct {
+	IDs    []uint `json:"ids" binding:"required,min=1,max=100"`
+	Status uint8  `json:"status" binding:"oneof=1 2 3"`
+	Reason string `json:"reason" binding:"max=200"`
+}
+
+type ContentBatchResult struct {
+	Updated int `json:"updated"`
+	Skipped int `json:"skipped"`
 }
 
 type UpdatePostRequest struct {

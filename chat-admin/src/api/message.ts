@@ -10,8 +10,10 @@ export interface AdminMessageItem {
   fromUserId: number
   toUserId: number
   fromName: string
+  fromMobile: string
   fromAvatar: string
   toName: string
+  toMobile: string
   contentType: number
   content: string
   replyToId?: number
@@ -31,6 +33,7 @@ export interface AdminMessageItem {
 export interface AdminMessageListRequest {
   page: number
   pageSize: number
+  id?: number
   userId?: number
   peerUserId?: number
   roomId?: number
@@ -49,7 +52,30 @@ export interface AdminMessageListResponse {
 export const getMessageList = (params: AdminMessageListRequest) =>
   request.get<AdminMessageListResponse>('/api/admin/message/list', params)
 
-export const getMessageContext = (id: number, limit = 20) =>
-  request.get<{ list: AdminMessageItem[] }>('/api/admin/message/context', { id, limit })
+/** beforeId / afterId 用于在已加载的上下文两端继续加载。 */
+export const getMessageContext = (
+  id: number,
+  options: { limit?: number; beforeId?: number; afterId?: number } = {},
+) =>
+  request.get<{ list: AdminMessageItem[] }>('/api/admin/message/context', {
+    id,
+    limit: options.limit ?? 20,
+    beforeId: options.beforeId,
+    afterId: options.afterId,
+  })
 
-export const deleteMessage = (id: number) => request.post('/api/admin/message/delete', { id })
+export interface DeleteMessagesRequest {
+  ids: number[]
+  reason: string
+  /** 0 不禁言；-1 永久；其余为小时数。 */
+  muteDuration: number
+}
+
+export interface DeleteMessagesResult {
+  deleted: number
+  skipped: number
+  muted: number
+}
+
+export const deleteMessages = (data: DeleteMessagesRequest) =>
+  request.post<DeleteMessagesResult>('/api/admin/message/batch/delete', data)

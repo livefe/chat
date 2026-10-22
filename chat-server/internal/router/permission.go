@@ -13,8 +13,6 @@ func registerPermissionRoutes(engine *gin.Engine, h *container.Handlers) {
 
 	admin := engine.Group("/api/admin/permission", h.EmployeeAuth, h.RequirePermission, h.AuditMiddleware)
 	{
-		admin.GET("/list", ph.List)
-		admin.GET("/detail", ph.Detail)
 		admin.GET("/tree", ph.Tree)
 		admin.POST("/create", ph.Create)
 		admin.POST("/update", ph.Update)

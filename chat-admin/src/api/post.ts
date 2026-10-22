@@ -47,6 +47,12 @@ export interface PostItem {
   updatedAt: string
   extras?: PostExtras
   signupSummary?: PostSignupSummary
+  auditRemark?: string
+  publisherMobile: string
+  roomName: string
+  deleted: boolean
+  auditedByName: string
+  auditedAt: string
 }
 
 export type PostDetail = PostItem
@@ -54,16 +60,27 @@ export type PostDetail = PostItem
 export interface PostListRequest {
   page: number
   pageSize: number
-  status?: number
+  id?: number
   publisherId?: number
+  publisherKeyword?: string
   roomId?: number
   category?: string
+  status?: number
   keyword?: string
+  startTime?: string
+  endTime?: string
+  sort?: 'asc' | 'desc'
+  includeDeleted?: boolean
 }
 
 export interface PostListResponse {
   total: number
   list: PostItem[]
+}
+
+export interface BatchResult {
+  updated: number
+  skipped: number
 }
 
 export interface PostSignupListCounts {
@@ -88,12 +105,18 @@ export interface PostSignupItem {
   remark?: string
 }
 
+export type SignupSortField = 'createdAt' | 'checkedInAt'
+
 export interface PostSignupListRequest {
   postId: number
   page: number
   pageSize: number
   status?: number
   checkIn?: number
+  userId?: number
+  keyword?: string
+  sortField?: SignupSortField
+  sortOrder?: 'asc' | 'desc'
 }
 
 export interface PostSignupListResponse {
@@ -103,17 +126,42 @@ export interface PostSignupListResponse {
   counts: PostSignupListCounts
 }
 
+export interface UserSignupItem {
+  id: number
+  postId: number
+  postTitle: string
+  postStatus: number
+  postStatusText: string
+  signupStatus: number
+  signupStatusText: string
+  checkedIn: boolean
+  checkedInAt: string
+  cancelledAt: string
+  createdAt: string
+}
+
+export interface UserSignupListResponse {
+  total: number
+  list: UserSignupItem[]
+}
+
 export const getPostList = (params: PostListRequest) =>
   request.get<PostListResponse>('/api/admin/post/list', params)
 
 export const getPostDetail = (id: number) =>
   request.get<PostDetail>('/api/admin/post/detail', { id })
 
-export const updatePostStatus = (id: number, status: number) =>
-  request.post('/api/admin/post/update/status', { id, status })
+export const updatePostStatus = (id: number, status: number, reason = '') =>
+  request.post('/api/admin/post/update/status', { id, status, reason })
+
+export const batchUpdatePostStatus = (ids: number[], status: number, reason = '') =>
+  request.post<BatchResult>('/api/admin/post/batch/status', { ids, status, reason })
 
 export const getPostSignupList = (params: PostSignupListRequest) =>
   request.get<PostSignupListResponse>('/api/admin/post/signup/list', params)
+
+export const getUserSignups = (params: { userId: number; page: number; pageSize: number }) =>
+  request.get<UserSignupListResponse>('/api/admin/post/signup/by-user', params)
 
 export interface PostMapRoomItem {
   roomId: number

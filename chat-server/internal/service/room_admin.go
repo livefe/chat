@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"app/internal/model"
 	"app/internal/repository"
@@ -15,28 +16,97 @@ import (
 	"app/pkg/utils"
 )
 
-func (s *RoomService) AdminGet(ctx context.Context, id uint) (*types.RoomDetail, error) {
+func (s *RoomService) AdminGet(ctx context.Context, id uint) (*types.AdminRoomDetail, error) {
 	room, err := s.getRoom(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return s.buildRoomDetail(room), nil
+	items, err := s.buildAdminRoomItems(ctx, []*model.Room{room})
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	d := &types.AdminRoomDetail{AdminRoomItem: items[0]}
+	if room.ShapeType == model.RoomShapePolygon {
+		if pts, err := utils.DecodePolygon(room.Polygon); err == nil {
+			d.Polygon = pts
+		}
+	}
+	return d, nil
 }
 
-func (s *RoomService) AdminList(ctx context.Context, req *types.RoomListRequest) (*types.RoomListResponse, error) {
+func (s *RoomService) AdminList(ctx context.Context, req *types.RoomListRequest) (*types.AdminRoomListResponse, error) {
 	filter := repository.RoomListFilter{
-		ID: req.ID, Name: req.Name, Status: req.Status, Source: req.Source, PlaceType: req.PlaceType,
+		ID: req.ID, UserID: req.UserID, Name: strings.TrimSpace(req.Name),
+		Status: req.Status, Source: req.Source, PlaceType: req.PlaceType,
 		Page: req.Page, PageSize: req.PageSize,
 	}
 	rooms, total, err := s.roomRepo.List(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	items := make([]types.RoomItem, 0, len(rooms))
-	for _, r := range rooms {
-		items = append(items, toRoomItem(r))
+	items, err := s.buildAdminRoomItems(ctx, rooms)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return &types.RoomListResponse{Total: total, List: items}, nil
+	return &types.AdminRoomListResponse{Total: total, List: items}, nil
+}
+
+func (s *RoomService) buildAdminRoomItems(ctx context.Context, rooms []*model.Room) ([]types.AdminRoomItem, error) {
+	if len(rooms) == 0 {
+		return []types.AdminRoomItem{}, nil
+	}
+	roomIDs := make([]uint, 0, len(rooms))
+	userIDs := make([]uint, 0, len(rooms))
+	employeeIDs := make([]uint, 0, len(rooms)*2)
+	for _, r := range rooms {
+		roomIDs = append(roomIDs, r.ID)
+		if r.Source == model.RoomSourceUser {
+			userIDs = append(userIDs, r.UserID)
+		} else {
+			employeeIDs = append(employeeIDs, r.EmployeeID)
+		}
+		employeeIDs = append(employeeIDs, r.AuditedBy)
+	}
+	profiles, err := s.userSvc.GetProfiles(ctx, uniqueNonZeroIDs(userIDs))
+	if err != nil {
+		return nil, err
+	}
+	employeeNames, err := employeeNameMap(ctx, s.employeeRepo, employeeIDs)
+	if err != nil {
+		return nil, err
+	}
+	postCounts, err := s.roomRepo.CountPostsByRoomIDs(ctx, roomIDs)
+	if err != nil {
+		return nil, err
+	}
+	messageCounts, err := s.roomRepo.CountMessagesByRoomIDs(ctx, roomIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]types.AdminRoomItem, 0, len(rooms))
+	for _, r := range rooms {
+		item := types.AdminRoomItem{
+			RoomItem:      toRoomItem(r),
+			PostCount:     postCounts[r.ID],
+			MessageCount:  messageCounts[r.ID],
+			AuditedByName: employeeNames[r.AuditedBy],
+			AuditedAt:     formatSignupUnix(r.AuditedAt),
+		}
+		item.AuditRemark = r.AuditRemark
+		if r.Source == model.RoomSourceUser {
+			if profile, ok := profiles[r.UserID]; ok {
+				item.CreatorNickname = utils.DisplayName(profile.Nickname)
+				item.CreatorMobile = utils.DesensitizeMobile(profile.Mobile)
+			} else if r.UserID > 0 {
+				item.CreatorNickname = deactivatedDisplayName()
+			}
+		} else {
+			item.EmployeeName = employeeNames[r.EmployeeID]
+		}
+		out = append(out, item)
+	}
+	return out, nil
 }
 
 func (s *RoomService) AdminCreate(ctx context.Context, employeeID uint, req *types.CreateRoomRequest) (uint, error) {
@@ -74,24 +144,74 @@ func (s *RoomService) AdminUpdate(ctx context.Context, req *types.UpdateRoomRequ
 	return nil
 }
 
-func (s *RoomService) AdminAudit(ctx context.Context, id uint, approve bool) error {
-	room, err := s.getRoom(ctx, id)
-	if err != nil {
-		return err
+// roomAuditable 待审核与已驳回（重新审核）的聊天区可以审核。
+func roomAuditable(status uint8) bool {
+	return status == model.RoomStatusPending || status == model.RoomStatusRejected
+}
+
+func roomAuditReason(approve bool, reason string) (string, error) {
+	if approve {
+		return "", nil
 	}
-	if room.Status != model.RoomStatusPending {
-		return errs.Forbidden("只有待审核状态可以审核")
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "", errs.Invalid("请填写驳回原因")
 	}
+	return reason, nil
+}
+
+func (s *RoomService) applyAudit(ctx context.Context, room *model.Room, employeeID uint, approve bool, reason string) error {
+	room.Status = model.RoomStatusRejected
 	if approve {
 		room.Status = model.RoomStatusEnabled
-	} else {
-		room.Status = model.RoomStatusRejected
 	}
+	room.AuditRemark = reason
+	room.AuditedBy = employeeID
+	room.AuditedAt = time.Now().Unix()
 	if err := s.roomRepo.Update(ctx, room); err != nil {
 		return fmt.Errorf("更新失败: %w", err)
 	}
 	s.syncRoomGeoPresence(ctx, room)
 	return nil
+}
+
+func (s *RoomService) AdminAudit(ctx context.Context, employeeID uint, req *types.AuditRoomRequest) error {
+	reason, err := roomAuditReason(req.Approve, req.Reason)
+	if err != nil {
+		return err
+	}
+	room, err := s.getRoom(ctx, req.ID)
+	if err != nil {
+		return err
+	}
+	if !roomAuditable(room.Status) {
+		return errs.Conflict("只有待审核或已驳回的聊天区可以审核")
+	}
+	return s.applyAudit(ctx, room, employeeID, req.Approve, reason)
+}
+
+func (s *RoomService) AdminBatchAudit(ctx context.Context, employeeID uint, req *types.BatchAuditRoomRequest) (*types.ContentBatchResult, error) {
+	reason, err := roomAuditReason(req.Approve, req.Reason)
+	if err != nil {
+		return nil, err
+	}
+	ids := uniqueNonZeroIDs(req.IDs)
+	rooms, err := s.roomRepo.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	result := &types.ContentBatchResult{Skipped: len(ids) - len(rooms)}
+	for _, room := range rooms {
+		if !roomAuditable(room.Status) {
+			result.Skipped++
+			continue
+		}
+		if err := s.applyAudit(ctx, room, employeeID, req.Approve, reason); err != nil {
+			return nil, err
+		}
+		result.Updated++
+	}
+	return result, nil
 }
 
 func (s *RoomService) AdminListNeighbors(ctx context.Context, req *types.AdminRoomNeighborsQuery) (*types.AdminRoomNeighborsResponse, error) {
@@ -209,6 +329,12 @@ func (s *RoomService) AdminUpdateStatus(ctx context.Context, id uint, status uin
 	room, err := s.getRoom(ctx, id)
 	if err != nil {
 		return err
+	}
+	allowed := (status == model.RoomStatusEnabled && room.Status == model.RoomStatusDisabled) ||
+		(status == model.RoomStatusDisabled && room.Status == model.RoomStatusEnabled)
+	if !allowed {
+		return errs.Conflict(fmt.Sprintf("聊天区当前为「%s」，不能改为「%s」",
+			utils.TextOf(roomStatusText, room.Status), utils.TextOf(roomStatusText, status)))
 	}
 	room.Status = status
 	if err := s.roomRepo.Update(ctx, room); err != nil {

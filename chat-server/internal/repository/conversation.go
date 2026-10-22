@@ -10,9 +10,12 @@ import (
 )
 
 type ConversationListFilter struct {
-	UserID   uint
-	Page     int
-	PageSize int
+	UserID       uint
+	PeerUserID   uint
+	ActiveAfter  int64
+	ActiveBefore int64
+	Page         int
+	PageSize     int
 }
 
 type ConversationListRow struct {
@@ -46,8 +49,22 @@ func (r *conversationRepository) Upsert(ctx context.Context, conv *model.Convers
 
 func (r *conversationRepository) List(ctx context.Context, f ConversationListFilter) ([]*model.Conversation, int64, error) {
 	db := database.Conn(ctx, r.db).Model(&model.Conversation{})
-	if f.UserID > 0 {
-		db = db.Where("user_min_id = ? OR user_max_id = ?", f.UserID, f.UserID)
+	switch {
+	case f.UserID > 0 && f.PeerUserID > 0:
+		minID, maxID := f.UserID, f.PeerUserID
+		if minID > maxID {
+			minID, maxID = maxID, minID
+		}
+		db = db.Where("user_min_id = ? AND user_max_id = ?", minID, maxID)
+	case f.UserID > 0 || f.PeerUserID > 0:
+		id := max(f.UserID, f.PeerUserID)
+		db = db.Where("user_min_id = ? OR user_max_id = ?", id, id)
+	}
+	if f.ActiveAfter > 0 {
+		db = db.Where("last_active_at >= ?", f.ActiveAfter)
+	}
+	if f.ActiveBefore > 0 {
+		db = db.Where("last_active_at <= ?", f.ActiveBefore)
 	}
 	var total int64
 	if err := db.Count(&total).Error; err != nil {

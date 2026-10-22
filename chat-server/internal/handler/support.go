@@ -101,7 +101,7 @@ func (h *SupportHandler) Read(c *gin.Context) {
 }
 
 func (h *SupportHandler) AdminGetConfig(c *gin.Context) {
-	result, err := h.supportSvc.GetProfile(c.Request.Context())
+	result, err := h.supportSvc.AdminGetConfig(c.Request.Context())
 	if err != nil {
 		response.WriteError(c, err)
 		return
@@ -122,12 +122,21 @@ func (h *SupportHandler) AdminUpdateConfig(c *gin.Context) {
 	response.Success(c, "", result)
 }
 
+func (h *SupportHandler) AdminQuickReplies(c *gin.Context) {
+	result, err := h.supportSvc.AdminQuickReplies(c.Request.Context())
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
 func (h *SupportHandler) AdminQueue(c *gin.Context) {
-	var req types.PageQuery
+	var req types.SupportQueueQuery
 	if !bindQuery(c, &req) {
 		return
 	}
-	result, err := h.supportSvc.AdminListQueue(c.Request.Context(), req.Page, req.PageSize)
+	result, err := h.supportSvc.AdminListQueue(c.Request.Context(), &req)
 	if err != nil {
 		response.WriteError(c, err)
 		return
@@ -166,7 +175,7 @@ func (h *SupportHandler) AdminActiveAll(c *gin.Context) {
 	if !bindQuery(c, &req) {
 		return
 	}
-	result, err := h.supportSvc.AdminListActive(c.Request.Context(), middleware.CurrentEmployeeID(c), req.Page, req.PageSize, req.AssigneeEmployeeID, req.Keyword)
+	result, err := h.supportSvc.AdminListActive(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
 	if err != nil {
 		response.WriteError(c, err)
 		return
@@ -179,7 +188,55 @@ func (h *SupportHandler) AdminClosedAll(c *gin.Context) {
 	if !bindQuery(c, &req) {
 		return
 	}
-	result, err := h.supportSvc.AdminListClosed(c.Request.Context(), middleware.CurrentEmployeeID(c), req.Page, req.PageSize, req.AssigneeEmployeeID, req.Keyword)
+	result, err := h.supportSvc.AdminListClosed(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *SupportHandler) AdminSession(c *gin.Context) {
+	var req types.SupportSessionQuery
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.supportSvc.AdminGetSession(c.Request.Context(), middleware.CurrentEmployeeID(c), req.ConversationID)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *SupportHandler) AdminByUser(c *gin.Context) {
+	var req types.SupportByUserQuery
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.supportSvc.AdminListByUser(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *SupportHandler) AdminHistory(c *gin.Context) {
+	var req types.SupportHistoryQuery
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.supportSvc.AdminListHistory(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *SupportHandler) AdminAgents(c *gin.Context) {
+	result, err := h.supportSvc.AdminListAgents(c.Request.Context())
 	if err != nil {
 		response.WriteError(c, err)
 		return

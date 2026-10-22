@@ -97,7 +97,10 @@ func (r *userRepository) List(ctx context.Context, f UserListFilter) ([]*model.U
 	}
 
 	if f.Mobile != "" {
-		db = db.Where("mobile LIKE ?", "%"+f.Mobile+"%")
+		like := "%" + f.Mobile + "%"
+		deactivated := database.Conn(ctx, r.db).Model(&model.UserDeactivationLog{}).
+			Select("user_id").Where("mobile LIKE ?", like)
+		db = db.Unscoped().Where("((deleted_at IS NULL AND mobile LIKE ?) OR id IN (?))", like, deactivated)
 	}
 	if f.Nickname != "" {
 		db = db.Where("nickname LIKE ?", "%"+f.Nickname+"%")

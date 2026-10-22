@@ -9,7 +9,8 @@ type IMSupportState struct {
 	AcceptAt           int64  `gorm:"type:bigint;not null;default:0;comment:接入时间" json:"acceptAt"`
 	CloseAt            int64  `gorm:"type:bigint;not null;default:0;comment:结案时间" json:"closeAt"`
 	Source             string `gorm:"type:varchar(32);not null;default:'app';comment:来源" json:"source"`
-	CloseReason        string `gorm:"type:varchar(64);not null;default:'';comment:结案原因" json:"closeReason"`
+	CloseReason        string `gorm:"type:varchar(64);not null;default:'';comment:结案原因 resolved|no_response|duplicate|other|user_cancel" json:"closeReason"`
+	CloseNote          string `gorm:"type:varchar(500);not null;default:'';comment:结案备注" json:"closeNote"`
 }
 
 func (IMSupportState) TableName() string { return "im_support_state" }

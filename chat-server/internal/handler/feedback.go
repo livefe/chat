@@ -94,3 +94,16 @@ func (h *FeedbackHandler) AdminUpdateStatus(c *gin.Context) {
 	}
 	response.Success(c, "更新成功", nil)
 }
+
+func (h *FeedbackHandler) AdminBatchClose(c *gin.Context) {
+	var req types.AdminFeedbackBatchCloseRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	result, err := h.feedbackSvc.AdminBatchClose(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "操作成功", result)
+}

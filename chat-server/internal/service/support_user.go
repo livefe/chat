@@ -112,7 +112,7 @@ func (s *SupportService) Cancel(ctx context.Context, userID, conversationID uint
 		}
 		if err := s.supportStateRepo.Update(ctx, conversationID, map[string]any{
 			"close_at":     now,
-			"close_reason": "user_cancel",
+			"close_reason": types.SupportCloseReasonUserCancel,
 		}); err != nil {
 			return fmt.Errorf("取消失败: %w", err)
 		}

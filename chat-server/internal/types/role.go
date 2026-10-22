@@ -32,6 +32,7 @@ type RoleItem struct {
 	Description string `json:"description"`
 	Status      uint8  `json:"status"`
 	StatusText  string `json:"statusText"`
+	MemberCount int64  `json:"memberCount"`
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
 }

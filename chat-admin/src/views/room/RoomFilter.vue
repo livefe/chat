@@ -2,10 +2,10 @@
   <el-form :inline="true" class="search-form">
     <el-form-item label="ID">
       <el-input
-        v-model.number="id"
+        v-model="idText"
         placeholder="聊天区ID"
         clearable
-        style="width: 120px"
+        style="width: 110px"
         @keyup.enter="emit('search')"
       />
     </el-form-item>
@@ -19,21 +19,27 @@
       />
     </el-form-item>
     <el-form-item label="状态">
-      <el-select v-model="status" placeholder="全部" clearable style="width: 120px">
-        <el-option label="待审核" :value="0" />
-        <el-option label="正常" :value="1" />
-        <el-option label="驳回" :value="2" />
-        <el-option label="禁用" :value="3" />
+      <el-select v-model="status" placeholder="全部" clearable style="width: 110px">
+        <el-option
+          v-for="item in ROOM_STATUS_OPTIONS"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
       </el-select>
     </el-form-item>
     <el-form-item label="来源">
-      <el-select v-model="source" placeholder="全部" clearable style="width: 120px">
-        <el-option label="后台" :value="1" />
-        <el-option label="用户" :value="2" />
+      <el-select v-model="source" placeholder="全部" clearable style="width: 100px">
+        <el-option
+          v-for="item in ROOM_SOURCE_OPTIONS"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
       </el-select>
     </el-form-item>
     <el-form-item label="类型">
-      <el-select v-model="placeType" placeholder="全部" clearable style="width: 130px">
+      <el-select v-model="placeType" placeholder="全部" clearable style="width: 120px">
         <el-option
           v-for="item in ROOM_PLACE_TYPE_OPTIONS"
           :key="item.value"
@@ -41,6 +47,15 @@
           :value="item.value"
         />
       </el-select>
+    </el-form-item>
+    <el-form-item label="创建人ID">
+      <el-input
+        v-model="userIdText"
+        placeholder="用户ID"
+        clearable
+        style="width: 110px"
+        @keyup.enter="emit('search')"
+      />
     </el-form-item>
     <el-form-item>
       <el-button type="primary" @click="emit('search')">查询</el-button>
@@ -50,12 +65,28 @@
 </template>
 
 <script setup lang="ts">
-import { ROOM_PLACE_TYPE_OPTIONS } from '@/constants/room'
+import { computed, type Ref } from 'vue'
+
+import { ROOM_PLACE_TYPE_OPTIONS, ROOM_SOURCE_OPTIONS, ROOM_STATUS_OPTIONS } from '@/constants/room'
 
 const id = defineModel<number>('id')
 const name = defineModel<string>('name', { required: true })
 const status = defineModel<number>('status')
 const source = defineModel<number>('source')
 const placeType = defineModel<number>('placeType')
+const userId = defineModel<number>('userId')
 const emit = defineEmits<{ search: []; reset: [] }>()
+
+function positiveIdText(model: Ref<number | undefined>) {
+  return computed({
+    get: () => (model.value ? String(model.value) : ''),
+    set: (v: string) => {
+      const n = Number(v.trim())
+      model.value = Number.isInteger(n) && n > 0 ? n : undefined
+    },
+  })
+}
+
+const idText = positiveIdText(id)
+const userIdText = positiveIdText(userId)
 </script>

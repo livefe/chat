@@ -1,12 +1,26 @@
 <script setup lang="ts">
+export interface ImShellTab {
+  key: string
+  label: string
+  /** 会话数量 */
+  count?: number
+  /** 未读消息数，以红色角标显示 */
+  unread?: number
+  warn?: boolean
+}
+
 defineProps<{
-  tabs?: { key: string; label: string; count?: number; warn?: boolean }[]
+  tabs?: ImShellTab[]
   activeTab?: string
 }>()
 
 const emit = defineEmits<{
   'update:activeTab': [key: string]
 }>()
+
+function cap(n: number) {
+  return n > 99 ? '99+' : String(n)
+}
 </script>
 
 <template>
@@ -27,7 +41,10 @@ const emit = defineEmits<{
             class="im-tab__count"
             :class="{ 'is-warn': t.warn }"
           >
-            {{ t.count > 99 ? '99+' : t.count }}
+            {{ cap(t.count) }}
+          </span>
+          <span v-if="t.unread" class="im-tab__unread" :title="`${t.unread} 条未读`">
+            {{ cap(t.unread) }}
           </span>
         </button>
       </div>

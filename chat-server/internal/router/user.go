@@ -29,10 +29,15 @@ func registerUserRoutes(engine *gin.Engine, h *container.Handlers) {
 	{
 		admin.GET("/list", uh.List)
 		admin.GET("/detail", uh.AdminDetail)
+		admin.GET("/punishments", uh.AdminPunishments)
+		admin.GET("/login-records", uh.AdminLoginRecords)
+		admin.POST("/mobile/reveal", uh.AdminRevealMobile)
 		admin.POST("/create", uh.Create)
 		admin.POST("/update", uh.Update)
 		admin.POST("/update/status", uh.UpdateStatus)
 		admin.POST("/update/mute", uh.AdminMute)
+		admin.POST("/batch/status", uh.AdminBatchStatus)
+		admin.POST("/batch/mute", uh.AdminBatchMute)
 		admin.POST("/deactivate", uh.AdminDeactivate)
 	}
 }

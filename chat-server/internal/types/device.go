@@ -19,6 +19,23 @@ type DeviceRegisterRequest struct {
 	OSVersion string `json:"osVersion" binding:"omitempty,max=32"`
 }
 
+type AdminDeviceItem struct {
+	ID           uint   `json:"id"`
+	DeviceID     string `json:"deviceId"`
+	Platform     string `json:"platform"`
+	Vendor       string `json:"vendor"`
+	AppVersion   string `json:"appVersion"`
+	OSVersion    string `json:"osVersion"`
+	PushEnabled  bool   `json:"pushEnabled"`
+	LastActiveAt int64  `json:"lastActiveAt"`
+	CreatedAt    string `json:"createdAt"`
+}
+
+type AdminDeviceListResponse struct {
+	Total int64             `json:"total"`
+	List  []AdminDeviceItem `json:"list"`
+}
+
 type DeviceRegisterCommand struct {
 	DeviceID   string
 	Platform   string

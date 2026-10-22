@@ -15,9 +15,23 @@ import (
 	"app/pkg/database"
 	"app/pkg/errs"
 	"app/pkg/logger"
+	"app/pkg/utils"
 
 	"gorm.io/gorm"
 )
+
+const (
+	permCodeSupportOverview = "im:support_overview"
+	permCodeSupportAccept   = "im:support:accept"
+)
+
+var supportCloseReasonText = map[string]string{
+	types.SupportCloseReasonResolved:   "已解决",
+	types.SupportCloseReasonNoResponse: "无应答",
+	types.SupportCloseReasonDuplicate:  "重复",
+	types.SupportCloseReasonOther:      "其他",
+	types.SupportCloseReasonUserCancel: "用户取消",
+}
 
 type employeeMessenger interface {
 	DeliverMessage(ctx context.Context, employeeIDs []uint, item *types.IMMessageItem)
@@ -177,44 +191,50 @@ func (s *SupportService) loadSupportOwnedByUser(ctx context.Context, userID, con
 	return st, conv, nil
 }
 
-func (s *SupportService) hasViewAll(ctx context.Context, employeeID uint) (bool, error) {
+func (s *SupportService) hasViewAll(ctx context.Context, employeeID uint) bool {
 	if s.permSvc == nil {
-		return false, nil
+		return false
 	}
-	return s.permSvc.HasPermissionCode(ctx, employeeID, "im:support_overview")
+	ok, err := s.permSvc.HasPermissionCode(ctx, employeeID, permCodeSupportOverview)
+	return err == nil && ok
 }
 
-func (s *SupportService) assertAgentAccess(ctx context.Context, employeeID, conversationID uint) error {
+func (s *SupportService) requireViewAll(ctx context.Context, employeeID uint) error {
+	if !s.hasViewAll(ctx, employeeID) {
+		return errs.Forbidden("无权查看全部客服会话")
+	}
+	return nil
+}
+
+// assertAgentAccess 校验员工能否查看会话消息：督导可看全部；坐席可看自己参与过的会话，
+// 以及自己服务过的用户的已结案历史会话；排队中会话只有督导可看。
+func (s *SupportService) assertAgentAccess(ctx context.Context, employeeID, conversationID uint) (*model.IMSupportState, *model.IMConversation, error) {
 	st, err := s.supportStateRepo.GetByConversationID(ctx, conversationID)
 	if err != nil {
-		return errs.NotFound("会话不存在")
+		return nil, nil, errs.NotFound("会话不存在")
 	}
 	conv, err := s.imSvc.GetConversation(ctx, conversationID)
 	if err != nil || conv.Type != model.IMConvTypeSupport {
-		return errs.NotFound("会话不存在")
+		return nil, nil, errs.NotFound("会话不存在")
+	}
+	if s.hasViewAll(ctx, employeeID) {
+		return st, conv, nil
 	}
 	if conv.Status == model.IMConvStatusQueued {
-		return errs.Forbidden("请先接入会话后再查看消息")
+		return nil, nil, errs.Forbidden("请先接入会话后再查看消息")
 	}
-	if ok, err := s.hasViewAll(ctx, employeeID); err == nil && ok {
-		return nil
+	if st.AssigneeEmployeeID == employeeID {
+		return st, conv, nil
+	}
+	if err := s.imSvc.RequireMember(ctx, conversationID, model.IMPrincipalEmployee, employeeID); err == nil {
+		return st, conv, nil
 	}
 	if conv.Status == model.IMConvStatusClosed {
-		if st.AssigneeEmployeeID == employeeID {
-			return nil
-		}
-
-		if err := s.imSvc.RequireMember(ctx, conversationID, model.IMPrincipalEmployee, employeeID); err != nil {
-			return err
-		}
-		return nil
-	}
-	if st.AssigneeEmployeeID != employeeID {
-		if err := s.imSvc.RequireMember(ctx, conversationID, model.IMPrincipalEmployee, employeeID); err != nil {
-			return err
+		if ok, err := s.supportStateRepo.HasServedUser(ctx, st.UserID, employeeID); err == nil && ok {
+			return st, conv, nil
 		}
 	}
-	return nil
+	return nil, nil, errs.Forbidden("无权访问该会话")
 }
 
 func (s *SupportService) sessionItemForUser(ctx context.Context, userID, conversationID uint) (*types.SupportSessionItem, error) {
@@ -248,26 +268,37 @@ func (s *SupportService) sessionItemForUser(ctx context.Context, userID, convers
 	return item, nil
 }
 
-func (s *SupportService) toAdminList(ctx context.Context, employeeID uint, rows []repository.SupportListRow, total int64) (*types.SupportAdminSessionListResponse, error) {
+func (s *SupportService) employeeNames(ctx context.Context, rows []repository.SupportListRow) map[uint]string {
+	ids := make([]uint, 0, len(rows))
+	for _, r := range rows {
+		if r.AssigneeEmployeeID > 0 {
+			ids = append(ids, r.AssigneeEmployeeID)
+		}
+	}
+	out := make(map[uint]string, len(ids))
+	emps, _ := s.employeeRepo.GetByIDs(ctx, ids)
+	for _, e := range emps {
+		out[e.ID] = e.Name
+	}
+	return out
+}
+
+// toAdminList 组装后台会话列表；employeeID > 0 时附带该员工的未读数。
+func (s *SupportService) toAdminList(ctx context.Context, employeeID uint, rows []repository.SupportListRow, total int64) *types.SupportAdminSessionListResponse {
 	userIDs := make([]uint, 0, len(rows))
-	empIDs := make([]uint, 0, len(rows))
 	for _, r := range rows {
 		userIDs = append(userIDs, r.UserID)
-		if r.AssigneeEmployeeID > 0 {
-			empIDs = append(empIDs, r.AssigneeEmployeeID)
-		}
 	}
 	users, _ := s.userRepo.GetByIDs(ctx, userIDs)
 	userMap := map[uint]*model.User{}
 	for _, u := range users {
 		userMap[u.ID] = u
 	}
-	emps, _ := s.employeeRepo.GetByIDs(ctx, empIDs)
-	empMap := map[uint]*model.Employee{}
-	for _, e := range emps {
-		empMap[e.ID] = e
+	empNames := s.employeeNames(ctx, rows)
+	var unread map[string]int64
+	if employeeID > 0 {
+		unread, _ = s.imSvc.UnreadMap(ctx, employeeID)
 	}
-	now := time.Now().Unix()
 	list := make([]types.SupportAdminSessionItem, 0, len(rows))
 	for _, r := range rows {
 		item := types.SupportAdminSessionItem{
@@ -276,53 +307,58 @@ func (s *SupportService) toAdminList(ctx context.Context, employeeID uint, rows 
 			StatusText:         supportStatusText(r.Status),
 			UserID:             r.UserID,
 			AssigneeEmployeeID: r.AssigneeEmployeeID,
+			AssigneeName:       empNames[r.AssigneeEmployeeID],
 			LastMessageID:      r.LastMessageID,
 			LastContent:        r.LastContent,
 			LastActiveAt:       r.LastActiveAt,
 			QueueAt:            r.QueueAt,
 			AcceptAt:           r.AcceptAt,
 			CloseAt:            r.CloseAt,
-		}
-		if r.Status == model.IMConvStatusQueued && r.QueueAt > 0 {
-			item.QueueWaitSec = now - r.QueueAt
+			CloseReason:        r.CloseReason,
+			CloseReasonText:    supportCloseReasonText[r.CloseReason],
+			CloseNote:          r.CloseNote,
+			UnreadCount:        unread[strconv.FormatUint(uint64(r.ID), 10)],
 		}
 		if u := userMap[r.UserID]; u != nil {
 			item.UserNickname = u.Nickname
-			item.UserMobile = u.Mobile
-		}
-		if e := empMap[r.AssigneeEmployeeID]; e != nil {
-			item.AssigneeName = e.Name
-		}
-		if employeeID > 0 {
-			unread, _ := s.imSvc.UnreadMap(ctx, employeeID)
-			item.UnreadCount = unread[strconv.FormatUint(uint64(r.ID), 10)]
+			item.UserMobile = utils.DesensitizeMobile(u.Mobile)
 		}
 		list = append(list, item)
 	}
-	return &types.SupportAdminSessionListResponse{Total: total, List: list}, nil
+	return &types.SupportAdminSessionListResponse{Total: total, List: list}
+}
+
+func (s *SupportService) toUserSessionList(ctx context.Context, rows []repository.SupportListRow, total int64) *types.SupportUserSessionListResponse {
+	empNames := s.employeeNames(ctx, rows)
+	list := make([]types.SupportUserSessionItem, 0, len(rows))
+	for _, r := range rows {
+		list = append(list, types.SupportUserSessionItem{
+			ID:              r.ID,
+			Status:          r.Status,
+			StatusText:      supportStatusText(r.Status),
+			AssigneeName:    empNames[r.AssigneeEmployeeID],
+			CreatedAt:       utils.FormatDateTime(r.CreatedAt),
+			AcceptedAt:      formatUnixTime(r.AcceptAt),
+			ClosedAt:        formatUnixTime(r.CloseAt),
+			CloseReason:     r.CloseReason,
+			CloseReasonText: supportCloseReasonText[r.CloseReason],
+			CloseNote:       r.CloseNote,
+			LastMessage:     r.LastContent,
+			LastMessageAt:   formatUnixTime(r.LastActiveAt),
+		})
+	}
+	return &types.SupportUserSessionListResponse{Total: total, List: list}
 }
 
 func (s *SupportService) adminSessionItem(ctx context.Context, employeeID, conversationID uint) (*types.SupportAdminSessionItem, error) {
-	st, err := s.supportStateRepo.GetByConversationID(ctx, conversationID)
+	row, err := s.supportStateRepo.GetRow(ctx, conversationID)
 	if err != nil {
-		return nil, errs.NotFound("会话不存在")
-	}
-	conv, err := s.imSvc.GetConversation(ctx, conversationID)
-	if err != nil {
-		return nil, err
-	}
-	row := repository.SupportListRow{
-		IMConversation:     *conv,
-		UserID:             st.UserID,
-		AssigneeEmployeeID: st.AssigneeEmployeeID,
-		QueueAt:            st.QueueAt,
-		AcceptAt:           st.AcceptAt,
-		CloseAt:            st.CloseAt,
-	}
-	resp, err := s.toAdminList(ctx, employeeID, []repository.SupportListRow{row}, 1)
-	if err != nil || len(resp.List) == 0 {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errs.NotFound("会话不存在")
+		}
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
+	resp := s.toAdminList(ctx, employeeID, []repository.SupportListRow{*row}, 1)
 	return &resp.List[0], nil
 }
 
@@ -339,28 +375,74 @@ func supportStatusText(status uint8) string {
 	}
 }
 
-func supportTruncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
+func formatUnixTime(sec int64) string {
+	if sec <= 0 {
+		return ""
 	}
-	return string(r[:n])
+	return utils.FormatDateTime(time.Unix(sec, 0))
 }
 
-func (s *SupportService) AdminUpdateConfig(ctx context.Context, req *types.SupportConfigUpdateRequest) (*types.SupportProfileResponse, error) {
+func toQuickReplyItems(list []model.SupportQuickReply) []types.SupportQuickReplyItem {
+	out := make([]types.SupportQuickReplyItem, 0, len(list))
+	for _, q := range list {
+		out = append(out, types.SupportQuickReplyItem{Title: q.Title, Content: q.Content})
+	}
+	return out
+}
+
+func (s *SupportService) AdminGetConfig(ctx context.Context) (*types.SupportAdminConfigResponse, error) {
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cfg.BrandName = supportTruncate(strings.TrimSpace(req.BrandName), 32)
+	return &types.SupportAdminConfigResponse{
+		SupportProfileResponse: types.SupportProfileResponse{
+			BrandName:      cfg.BrandName,
+			BrandAvatarURL: cfg.BrandAvatarURL,
+			WelcomeText:    cfg.WelcomeText,
+			OfflineText:    cfg.OfflineText,
+			Enabled:        cfg.Enabled == 1,
+		},
+		QuickReplies: toQuickReplyItems(cfg.QuickReplies),
+	}, nil
+}
+
+func (s *SupportService) AdminQuickReplies(ctx context.Context) (*types.SupportQuickReplyListResponse, error) {
+	cfg, err := s.loadConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &types.SupportQuickReplyListResponse{List: toQuickReplyItems(cfg.QuickReplies)}, nil
+}
+
+func (s *SupportService) AdminUpdateConfig(ctx context.Context, req *types.SupportConfigUpdateRequest) (*types.SupportAdminConfigResponse, error) {
+	cfg, err := s.loadConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	brand := strings.TrimSpace(req.BrandName)
+	if brand == "" {
+		return nil, errs.Invalid("请填写品牌名称")
+	}
+	replies := make([]model.SupportQuickReply, 0, len(req.QuickReplies))
+	for _, q := range req.QuickReplies {
+		title := strings.TrimSpace(q.Title)
+		content := strings.TrimSpace(q.Content)
+		if title == "" || content == "" {
+			return nil, errs.Invalid("快捷回复的标题和内容不能为空")
+		}
+		replies = append(replies, model.SupportQuickReply{Title: title, Content: content})
+	}
+	cfg.BrandName = brand
 	cfg.BrandAvatarURL = strings.TrimSpace(req.BrandAvatarURL)
-	cfg.WelcomeText = supportTruncate(strings.TrimSpace(req.WelcomeText), 500)
-	cfg.OfflineText = supportTruncate(strings.TrimSpace(req.OfflineText), 500)
+	cfg.WelcomeText = strings.TrimSpace(req.WelcomeText)
+	cfg.OfflineText = strings.TrimSpace(req.OfflineText)
+	cfg.QuickReplies = replies
 	if req.Enabled != nil {
 		cfg.Enabled = *req.Enabled
 	}
 	if err := s.supportConfigRepo.Save(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("保存失败: %w", err)
 	}
-	return s.GetProfile(ctx)
+	return s.AdminGetConfig(ctx)
 }

@@ -13,7 +13,7 @@ type RegionRepository interface {
 	UpsertBatch(ctx context.Context, items []model.Region) (inserted int, updated int, err error)
 	RevokeExcept(ctx context.Context, codes []string) (int64, error)
 	ListChildren(ctx context.Context, parentCode string) ([]*model.Region, error)
-	Search(ctx context.Context, keyword string, level uint8, limit int) ([]*model.Region, error)
+	Search(ctx context.Context, keyword string, byCode bool, level uint8, limit int) ([]*model.Region, error)
 	GetByCode(ctx context.Context, code string) (*model.Region, error)
 }
 
@@ -117,13 +117,15 @@ func (r *regionRepository) ListChildren(ctx context.Context, parentCode string) 
 	return list, err
 }
 
-func (r *regionRepository) Search(ctx context.Context, keyword string, level uint8, limit int) ([]*model.Region, error) {
+func (r *regionRepository) Search(ctx context.Context, keyword string, byCode bool, level uint8, limit int) ([]*model.Region, error) {
 	db := database.Conn(ctx, r.db).Model(&model.Region{}).
 		Where("status = ?", model.RegionStatusActive)
 	if level > 0 {
 		db = db.Where("level = ?", level)
 	}
-	if keyword != "" {
+	if byCode {
+		db = db.Where("code LIKE ? OR amap_adcode LIKE ?", keyword+"%", keyword+"%")
+	} else if keyword != "" {
 		like := "%" + keyword + "%"
 		db = db.Where("name LIKE ? OR short_name LIKE ?", like, like)
 	}

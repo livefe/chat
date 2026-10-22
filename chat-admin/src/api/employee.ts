@@ -1,5 +1,4 @@
 import { request, uploadForm } from './http'
-import type { RoleItem } from './role'
 
 export interface EmployeeInfo {
   id: number
@@ -11,6 +10,13 @@ export interface EmployeeInfo {
   status: number
 }
 
+export interface EmployeeRoleBrief {
+  id: number
+  name: string
+  code: string
+  status: number
+}
+
 export interface EmployeeItem {
   id: number
   mobile: string
@@ -19,10 +25,12 @@ export interface EmployeeItem {
   avatarUrl: string
   departmentId: number
   department: string
-  roles: { id: number; name: string; code: string }[]
+  roles: EmployeeRoleBrief[]
   status: number
   statusText: string
   remark: string
+  lastLoginAt: string
+  lastLoginIp: string
   createdAt: string
   updatedAt: string
 }
@@ -30,15 +38,38 @@ export interface EmployeeItem {
 export interface EmployeeListRequest {
   page: number
   pageSize: number
+  id?: number
   mobile?: string
   name?: string
+  employeeNo?: string
   departmentId?: number
+  roleId?: number
   status?: number
+  startTime?: string
+  endTime?: string
 }
 
 export interface EmployeeListResponse {
   total: number
   list: EmployeeItem[]
+}
+
+export interface EmployeeRoleOptions {
+  options: EmployeeRoleBrief[]
+  assignedIds: number[]
+  operatorIsSuper: boolean
+  targetIsSuper: boolean
+}
+
+export interface EmployeeLoginRecord {
+  id: number
+  loginType: string
+  ip: string
+  userAgent: string
+  status: number
+  statusText: string
+  remark: string
+  createdAt: string
 }
 
 export const getEmployeeList = (params: EmployeeListRequest) =>
@@ -57,7 +88,7 @@ export const uploadMyAvatar = (file: File) => {
 
 export const createEmployee = (data: {
   mobile: string
-  name?: string
+  name: string
   employeeNo?: string
   departmentId: number
   status: number
@@ -67,18 +98,28 @@ export const createEmployee = (data: {
 export const updateEmployee = (data: {
   id: number
   mobile: string
-  name?: string
+  name: string
   employeeNo?: string
   departmentId: number
-  status: number
   remark?: string
 }) => request.post('/api/admin/employee/update', data)
 
 export const updateEmployeeStatus = (id: number, status: number) =>
   request.post('/api/admin/employee/update/status', { id, status })
 
-export const getEmployeeRoles = (id: number) =>
-  request.get<RoleItem[]>('/api/admin/employee/roles', { id })
+/** 不传 employeeId 时只返回启用角色，用于筛选。 */
+export const getEmployeeRoleOptions = (employeeId?: number) =>
+  request.get<EmployeeRoleOptions>('/api/admin/employee/role-options', { employeeId })
 
 export const assignEmployeeRoles = (employeeId: number, roleIds: number[]) =>
   request.post('/api/admin/employee/assign/roles', { employeeId, roleIds })
+
+export const getEmployeeLoginRecords = (params: {
+  employeeId: number
+  page: number
+  pageSize: number
+}) =>
+  request.get<{ total: number; list: EmployeeLoginRecord[] }>(
+    '/api/admin/employee/login-records',
+    params,
+  )

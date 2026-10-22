@@ -99,11 +99,79 @@ func (h *UserHandler) UpdateStatus(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.userSvc.AdminUpdateStatus(c.Request.Context(), req.ID, req.Status); err != nil {
+	meta := service.PunishMeta{EmployeeID: middleware.CurrentEmployeeID(c), Reason: req.Reason}
+	if err := h.userSvc.AdminUpdateStatus(c.Request.Context(), req.ID, req.Status, meta); err != nil {
 		response.WriteError(c, err)
 		return
 	}
 	response.Success(c, "更新成功", nil)
+}
+
+func (h *UserHandler) AdminBatchStatus(c *gin.Context) {
+	var req types.BatchUserStatusRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	meta := service.PunishMeta{EmployeeID: middleware.CurrentEmployeeID(c), Reason: req.Reason}
+	result, err := h.userSvc.AdminBatchStatus(c.Request.Context(), &req, meta)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "操作成功", result)
+}
+
+func (h *UserHandler) AdminBatchMute(c *gin.Context) {
+	var req types.BatchUserMuteRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	meta := service.PunishMeta{EmployeeID: middleware.CurrentEmployeeID(c), Reason: req.Reason}
+	result, err := h.userSvc.AdminBatchMute(c.Request.Context(), &req, meta)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "操作成功", result)
+}
+
+func (h *UserHandler) AdminPunishments(c *gin.Context) {
+	var req types.AdminUserSubListRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.userSvc.AdminListPunishments(c.Request.Context(), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *UserHandler) AdminLoginRecords(c *gin.Context) {
+	var req types.AdminUserSubListRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.userSvc.AdminLoginRecords(c.Request.Context(), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
+func (h *UserHandler) AdminRevealMobile(c *gin.Context) {
+	var req types.IDRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	mobile, err := h.userSvc.AdminRevealMobile(c.Request.Context(), req.ID)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", types.RevealMobileResponse{Mobile: mobile})
 }
 
 func (h *UserHandler) SendDeactivationCode(c *gin.Context) {
@@ -195,7 +263,8 @@ func (h *UserHandler) AdminMute(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.userSvc.AdminMute(c.Request.Context(), req.ID, req.Duration, req.Reason); err != nil {
+	meta := service.PunishMeta{EmployeeID: middleware.CurrentEmployeeID(c), Reason: req.Reason}
+	if err := h.userSvc.AdminMute(c.Request.Context(), req.ID, req.Duration, meta); err != nil {
 		response.WriteError(c, err)
 		return
 	}

@@ -113,6 +113,13 @@ func (s *IMService) departmentNames(ctx context.Context, ids []uint) map[uint]st
 	return out
 }
 
+func (s *IMService) OnlineEmployees(ctx context.Context, ids []uint) map[uint]struct{} {
+	if s.deliverer == nil || len(ids) == 0 {
+		return map[uint]struct{}{}
+	}
+	return s.deliverer.OnlineEmployees(ctx, ids)
+}
+
 func (s *IMService) UnreadMap(ctx context.Context, employeeID uint) (map[string]int64, error) {
 	raw, err := s.cache.HGetAll(ctx, formatIMUnreadKey(employeeID)).Result()
 	if err != nil {

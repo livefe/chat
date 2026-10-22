@@ -6,7 +6,7 @@ import 'element-plus/es/components/loading/style/css'
 
 import App from './App.vue'
 import { setAuthLostHandler, setAuthTokenProvider } from '@/api/http'
-import router from './router'
+import router, { loginLocation } from './router'
 import { useEmployeeStore } from '@/stores/employee'
 import { ADMIN_ICONS } from '@/constants/adminIcons'
 import '@/styles/theme.css'
@@ -29,8 +29,10 @@ setAuthTokenProvider(
   () => employeeStore.tryRefresh(),
 )
 setAuthLostHandler(() => {
+  const current = router.currentRoute.value
   employeeStore.logout()
-  void router.replace('/login')
+  if (current.path === '/login') return
+  void router.replace(loginLocation(current.fullPath))
 })
 
 app.mount('#app')

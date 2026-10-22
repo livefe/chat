@@ -36,7 +36,8 @@
             />
             <el-button
               size="large"
-              :disabled="countdown > 0"
+              :loading="sendingCode"
+              :disabled="countdown > 0 || sendingCode"
               @click="handleSendCode"
               class="send-btn"
             >
@@ -63,19 +64,22 @@
 
 <script setup lang="ts">
 import { ref, reactive, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { showApiError } from '@/utils/apiError'
 import { useEmployeeStore } from '@/stores/employee'
 import { MOBILE_PATTERN, MOBILE_RULE } from '@/constants'
 import { HOME_PATH } from '@/router/dynamic'
+import { safeRedirect } from '@/utils/navigation'
 import { sendLoginCode } from '@/api/sms'
 
+const route = useRoute()
 const router = useRouter()
 const employeeStore = useEmployeeStore()
 
 const formRef = ref()
 const loading = ref(false)
+const sendingCode = ref(false)
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -111,16 +115,20 @@ function startCountdown() {
 }
 
 async function handleSendCode() {
+  if (sendingCode.value || countdown.value > 0) return
   if (!MOBILE_PATTERN.test(form.mobile)) {
     ElMessage.warning('请输入正确的手机号')
     return
   }
+  sendingCode.value = true
   try {
     await sendLoginCode(form.mobile)
     ElMessage.success('验证码发送成功')
     startCountdown()
   } catch (e) {
     showApiError(e, '验证码发送失败')
+  } finally {
+    sendingCode.value = false
   }
 }
 
@@ -135,7 +143,7 @@ async function handleLogin() {
   try {
     await employeeStore.login(form.mobile, form.code)
     ElMessage.success('登录成功')
-    router.push(HOME_PATH)
+    await router.replace(safeRedirect(route.query.redirect) ?? HOME_PATH)
   } catch (e) {
     showApiError(e, '登录失败')
   } finally {

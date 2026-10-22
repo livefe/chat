@@ -45,6 +45,19 @@ func (h *DeviceHandler) Register(c *gin.Context) {
 	response.Success(c, "绑定成功", nil)
 }
 
+func (h *DeviceHandler) AdminList(c *gin.Context) {
+	var req types.AdminUserSubListRequest
+	if !bindQuery(c, &req) {
+		return
+	}
+	result, err := h.deviceSvc.AdminListByUser(c.Request.Context(), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
+}
+
 func (h *DeviceHandler) Unbind(c *gin.Context) {
 	if err := h.deviceSvc.Unbind(c.Request.Context(), middleware.CurrentUserID(c), middleware.ClientDeviceID(c)); err != nil {
 		response.WriteError(c, err)

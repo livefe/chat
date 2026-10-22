@@ -8,15 +8,27 @@ import (
 	"app/pkg/database"
 )
 
+// AdCampaignListFilter 的 From/To 为 Unix 秒，筛选排期与 [From, To) 有交集的计划。
+type AdCampaignListFilter struct {
+	Status         *uint8
+	Keyword        string
+	AdvertiserName string
+	From           int64
+	To             int64
+	Page           int
+	PageSize       int
+}
+
 type AdCampaignRepository interface {
 	Create(ctx context.Context, item *model.AdCampaign) error
 	Update(ctx context.Context, item *model.AdCampaign) error
 	GetByID(ctx context.Context, id uint) (*model.AdCampaign, error)
-	List(ctx context.Context, status *uint8, keyword string, page, pageSize int) ([]*model.AdCampaign, int64, error)
+	List(ctx context.Context, f AdCampaignListFilter) ([]*model.AdCampaign, int64, error)
+	ListAdvertisers(ctx context.Context) ([]string, error)
 	ListActiveCandidates(ctx context.Context, now int64) ([]*model.AdCampaign, error)
 	CountActiveByAdvertiser(ctx context.Context, advertiserName string, excludeID uint) (int64, error)
 	UpdateStatus(ctx context.Context, id uint, status uint8, rejectRemark string, landingInvalid bool) error
-	BatchUpdateStatus(ctx context.Context, ids []uint, status uint8) error
+	PauseActive(ctx context.Context, ids []uint) (int64, error)
 	MarkEndedExpired(ctx context.Context, now int64) (int64, error)
 }
 
@@ -43,22 +55,41 @@ func (r *adCampaignRepository) GetByID(ctx context.Context, id uint) (*model.AdC
 	return &item, nil
 }
 
-func (r *adCampaignRepository) List(ctx context.Context, status *uint8, keyword string, page, pageSize int) ([]*model.AdCampaign, int64, error) {
+func (r *adCampaignRepository) List(ctx context.Context, f AdCampaignListFilter) ([]*model.AdCampaign, int64, error) {
 	q := database.Conn(ctx, r.db).Model(&model.AdCampaign{})
-	if status != nil {
-		q = q.Where("status = ?", *status)
+	if f.Status != nil {
+		q = q.Where("status = ?", *f.Status)
 	}
-	if kw := strings.TrimSpace(keyword); kw != "" {
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
-		q = q.Where("advertiser_name LIKE ? OR title LIKE ? OR name LIKE ?", like, like, like)
+		q = q.Where("(advertiser_name LIKE ? OR title LIKE ? OR name LIKE ?)", like, like, like)
+	}
+	if name := strings.TrimSpace(f.AdvertiserName); name != "" {
+		q = q.Where("advertiser_name = ?", name)
+	}
+	if f.From > 0 {
+		q = q.Where("end_at >= ?", f.From)
+	}
+	if f.To > 0 {
+		q = q.Where("start_at < ?", f.To)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var list []*model.AdCampaign
-	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	err := q.Order("id DESC").Offset((f.Page - 1) * f.PageSize).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
+}
+
+func (r *adCampaignRepository) ListAdvertisers(ctx context.Context) ([]string, error) {
+	var names []string
+	err := database.Conn(ctx, r.db).Model(&model.AdCampaign{}).
+		Where("advertiser_name <> ''").
+		Distinct("advertiser_name").
+		Order("advertiser_name ASC").
+		Pluck("advertiser_name", &names).Error
+	return names, err
 }
 
 func (r *adCampaignRepository) ListActiveCandidates(ctx context.Context, now int64) ([]*model.AdCampaign, error) {
@@ -92,8 +123,12 @@ func (r *adCampaignRepository) UpdateStatus(ctx context.Context, id uint, status
 	return database.Conn(ctx, r.db).Model(&model.AdCampaign{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *adCampaignRepository) BatchUpdateStatus(ctx context.Context, ids []uint, status uint8) error {
-	return database.Conn(ctx, r.db).Model(&model.AdCampaign{}).Where("id IN ?", ids).Update("status", status).Error
+// PauseActive 只暂停投放中的计划，返回实际暂停的条数。
+func (r *adCampaignRepository) PauseActive(ctx context.Context, ids []uint) (int64, error) {
+	res := database.Conn(ctx, r.db).Model(&model.AdCampaign{}).
+		Where("id IN ? AND status = ?", ids, model.AdStatusActive).
+		Update("status", model.AdStatusPaused)
+	return res.RowsAffected, res.Error
 }
 
 func (r *adCampaignRepository) MarkEndedExpired(ctx context.Context, now int64) (int64, error) {

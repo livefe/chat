@@ -38,12 +38,48 @@ func (s *RegionService) ListChildren(ctx context.Context, parentCode string) (*t
 	return &types.RegionListResponse{List: toRegionItems(list)}, nil
 }
 
-func (s *RegionService) Search(ctx context.Context, req *types.RegionSearchRequest) (*types.RegionListResponse, error) {
-	list, err := s.regionRepo.Search(ctx, req.Keyword, req.Level, req.Limit)
+func (s *RegionService) Search(ctx context.Context, req *types.RegionSearchRequest) (*types.RegionSearchResponse, error) {
+	keyword := strings.TrimSpace(req.Keyword)
+	byCode := isDigits(keyword)
+	list, err := s.regionRepo.Search(ctx, keyword, byCode, req.Level, req.Limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	return &types.RegionListResponse{List: toRegionItems(list)}, nil
+	truncated := len(list) > req.Limit
+	if truncated {
+		list = list[:req.Limit]
+	}
+	return &types.RegionSearchResponse{List: toRegionItems(list), Truncated: truncated}, nil
+}
+
+// Trail 返回从省级到该区划自身的完整路径。
+func (s *RegionService) Trail(ctx context.Context, code string) (*types.RegionListResponse, error) {
+	trail := make([]*model.Region, 0, 4)
+	next := normalizeRegionCode(code)
+	for next != "" && len(trail) <= int(model.RegionLevelTownship) {
+		item, err := s.regionRepo.GetByCode(ctx, next)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errs.NotFound("区划不存在或已撤销")
+			}
+			return nil, fmt.Errorf("查询失败: %w", err)
+		}
+		trail = append([]*model.Region{item}, trail...)
+		next = item.ParentCode
+	}
+	return &types.RegionListResponse{List: toRegionItems(trail)}, nil
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *RegionService) Get(ctx context.Context, code string) (*types.RegionItem, error) {

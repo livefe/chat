@@ -16,6 +16,8 @@ export interface ImConversationItem {
   peerId: number
   peerName: string
   peerAvatarUrl: string
+  peerDepartmentName: string
+  peerOnline: boolean
   lastMessageId: number
   lastContent: string
   lastActiveAt: number
@@ -51,7 +53,7 @@ export const getImContacts = (params: {
 export const openImDM = (peerEmployeeId: number) =>
   request.post<ImConversationItem>('/api/admin/im/conversations/dm', { peerEmployeeId })
 
-export const getImConversations = (params: { page: number; pageSize: number }) =>
+export const getImConversations = (params: { page: number; pageSize: number; keyword?: string }) =>
   request.get<{ total: number; list: ImConversationItem[] }>('/api/admin/im/conversations', params)
 
 export const getImMessages = (params: {

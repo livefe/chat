@@ -5,12 +5,8 @@
         <div class="card-header">
           <span>{{ route.meta.title }}</span>
           <div class="card-header-actions">
-            <el-button
-              v-if="can(PERM.AdCampaignPause)"
-              :disabled="!selectedIds.length"
-              @click="handleBatchPause"
-            >
-              批量暂停
+            <el-button v-if="canBatchPause" :disabled="!selected.length" @click="handleBatchPause">
+              批量暂停{{ selected.length ? `（${selected.length}）` : '' }}
             </el-button>
             <el-button v-if="can(PERM.AdCampaignUpdate)" type="primary" @click="handleAdd">
               新建计划
@@ -22,17 +18,23 @@
       <AdCampaignFilter
         v-model:keyword="query.keyword"
         v-model:status="query.status"
+        v-model:advertiser-name="query.advertiserName"
+        v-model:start-date="query.startDate"
+        v-model:end-date="query.endDate"
         @search="handleSearch"
         @reset="handleReset"
       />
+      <div v-if="canBatchPause" class="batch-hint">仅「投放中」的计划可勾选批量暂停</div>
       <AdCampaignTable
         :list="list"
         :loading="loading"
+        :error="error"
         :total="total"
+        :selectable="canBatchPause"
         v-model:page="query.page"
         v-model:page-size="query.pageSize"
-        @selection-change="onSelectionChange"
-        @edit="handleEdit"
+        @selection-change="(rows) => (selected = rows)"
+        @edit="(row) => formDialog?.openEdit(row.id)"
         @status="handleStatus"
         @audit="openAudit"
         @copy="handleCopy"
@@ -48,82 +50,114 @@
       :campaign-id="auditCampaignId"
       :submitting="auditSubmitting"
       @update:visible="auditVisible = $event"
-      @approve="submitAudit(true)"
-      @reject="submitAudit(false, $event)"
+      @approve="submitAudit('approve')"
+      @reject="submitAudit('reject', $event)"
     />
 
-    <el-drawer v-model="statsVisible" :title="statsTitle" size="520px" destroy-on-close>
-      <el-table :data="statsList" v-loading="statsLoading" size="small">
-        <el-table-column prop="statDate" label="日期" width="120" />
-        <el-table-column prop="impressions" label="曝光" />
-        <el-table-column prop="clicks" label="点击" />
-        <el-table-column label="CTR">
-          <template #default="{ row }">{{ formatCtr(row.ctr) }}</template>
-        </el-table-column>
-      </el-table>
-    </el-drawer>
+    <AdCampaignStatsDrawer
+      v-model="statsVisible"
+      :campaign-id="statsCampaign.id"
+      :campaign-title="statsCampaign.title"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  auditAdCampaign,
   batchPauseAdCampaigns,
   copyAdCampaign,
-  getAdCampaignDailyStats,
   getAdCampaignList,
   updateAdCampaignStatus,
   type AdCampaignItem,
-  type AdDailyStatItem,
 } from '@/api/ad'
-import { usePaginatedList } from '@/composables/usePaginatedList'
-import { confirmAndRun } from '@/utils/confirm'
+import { useListQuery } from '@/composables/useListQuery'
+import { usePermission } from '@/composables/usePermission'
+import { AD_STATUS } from '@/constants/ad'
+import { PERM } from '@/constants/permission'
 import { showApiError } from '@/utils/apiError'
 import AdCampaignFilter from './AdCampaignFilter.vue'
 import AdCampaignTable from './AdCampaignTable.vue'
 import AdCampaignFormDialog from './AdCampaignFormDialog.vue'
 import AdCampaignAuditDialog from './AdCampaignAuditDialog.vue'
-import { AD_STATUS } from '@/constants/ad'
-import { PERM } from '@/constants/permission'
-import { usePermission } from '@/composables/usePermission'
+import AdCampaignStatsDrawer from './AdCampaignStatsDrawer.vue'
 
 const { can } = usePermission()
 const route = useRoute()
-const { loading, list, total, query, fetchList, handleSearch, handleReset } = usePaginatedList(
-  getAdCampaignList,
-  { page: 1, pageSize: 20, keyword: '', status: undefined as number | undefined },
-)
+const { loading, error, list, total, query, fetchList, handleSearch, handleReset } = useListQuery({
+  fetch: (q) => getAdCampaignList(q),
+  defaults: {
+    page: 1,
+    pageSize: 20,
+    keyword: '',
+    status: undefined as number | undefined,
+    advertiserName: '',
+    startDate: '',
+    endDate: '',
+  },
+  schema: {
+    keyword: 'string',
+    status: 'number',
+    advertiserName: 'string',
+    startDate: 'string',
+    endDate: 'string',
+  },
+  errorMessage: '获取广告计划失败',
+})
 
-const selectedIds = ref<number[]>([])
+const canBatchPause = computed(() => can(PERM.AdCampaignPause))
+const selected = ref<AdCampaignItem[]>([])
 const formDialog = ref<InstanceType<typeof AdCampaignFormDialog> | null>(null)
 const auditVisible = ref(false)
 const auditCampaignId = ref(0)
 const auditSubmitting = ref(false)
+const statsVisible = ref(false)
+const statsCampaign = ref({ id: 0, title: '' })
 
-function onSelectionChange(rows: AdCampaignItem[]) {
-  selectedIds.value = rows.map((r) => r.id)
-}
-
-function formatCtr(ctr?: number) {
-  if (ctr == null || Number.isNaN(ctr)) return '0%'
-  return `${(ctr * 100).toFixed(2)}%`
+const STATUS_ACTIONS: Record<number, { label: string; message: (title: string) => string }> = {
+  [AD_STATUS.Pending]: {
+    label: '提交审核',
+    message: (t) => `确定将「${t}」提交审核？审核期间不可编辑。`,
+  },
+  [AD_STATUS.Active]: {
+    label: '恢复投放',
+    message: (t) => `确定恢复投放「${t}」？恢复后立即按排期展示。`,
+  },
+  [AD_STATUS.Paused]: {
+    label: '暂停',
+    message: (t) => `确定暂停「${t}」？暂停后立即停止展示，可随时恢复投放。`,
+  },
+  [AD_STATUS.Ended]: {
+    label: '结束',
+    message: (t) => `确定结束「${t}」？结束后不可恢复，如需再次投放请复制该计划。`,
+  },
 }
 
 function handleAdd() {
   formDialog.value?.openCreate()
 }
 
-function handleEdit(row: AdCampaignItem) {
-  void formDialog.value?.openEdit(row)
-}
-
-async function handleStatus(row: AdCampaignItem, status: number, label: string) {
-  await confirmAndRun(`确定对「${row.title}」执行${label}？`, async () => {
+async function handleStatus(row: AdCampaignItem, status: number) {
+  const action = STATUS_ACTIONS[status]
+  if (!action) return
+  try {
+    await ElMessageBox.confirm(action.message(row.title), action.label, {
+      type: 'warning',
+      confirmButtonText: action.label,
+    })
+  } catch {
+    return
+  }
+  try {
     await updateAdCampaignStatus({ id: row.id, status })
+    ElMessage.success(`已${action.label}`)
     await fetchList()
-  })
+  } catch (e) {
+    showApiError(e, `${action.label}失败`)
+  }
 }
 
 function openAudit(row: AdCampaignItem) {
@@ -131,68 +165,65 @@ function openAudit(row: AdCampaignItem) {
   auditVisible.value = true
 }
 
-async function submitAudit(approve: boolean, rejectRemark = '') {
+async function submitAudit(action: 'approve' | 'reject', rejectRemark = '') {
   if (!auditCampaignId.value) return
   auditSubmitting.value = true
   try {
-    await updateAdCampaignStatus({
-      id: auditCampaignId.value,
-      status: approve ? AD_STATUS.Active : AD_STATUS.Rejected,
-      rejectRemark: approve ? undefined : rejectRemark,
-    })
-    ElMessage.success(approve ? '已通过' : '已驳回')
+    await auditAdCampaign({ id: auditCampaignId.value, action, rejectRemark })
+    ElMessage.success(action === 'approve' ? '已通过并上架' : '已驳回')
     auditVisible.value = false
     await fetchList()
   } catch (e) {
-    showApiError(e, approve ? '审核通过失败' : '驳回失败')
+    showApiError(e, action === 'approve' ? '审核通过失败' : '驳回失败')
   } finally {
     auditSubmitting.value = false
   }
 }
 
 async function handleCopy(row: AdCampaignItem) {
-  await confirmAndRun(
-    `确定复制「${row.title}」？`,
-    async () => {
-      await copyAdCampaign(row.id)
-      await fetchList()
-    },
-    '复制成功',
-  )
-}
-
-async function handleBatchPause() {
-  if (!selectedIds.value.length) return
-  await confirmAndRun(
-    `确定暂停选中的 ${selectedIds.value.length} 条计划？`,
-    async () => {
-      await batchPauseAdCampaigns(selectedIds.value)
-      selectedIds.value = []
-      await fetchList()
-    },
-    '已暂停',
-  )
-}
-
-const statsVisible = ref(false)
-const statsLoading = ref(false)
-const statsList = ref<AdDailyStatItem[]>([])
-const statsTitle = ref('每日数据')
-
-async function openStats(row: AdCampaignItem) {
-  statsTitle.value = `每日数据 · ${row.title} (#${row.id})`
-  statsVisible.value = true
-  statsLoading.value = true
-  statsList.value = []
   try {
-    const { data } = await getAdCampaignDailyStats({ campaignId: row.id })
-    statsList.value = data.list || []
+    const { data } = await copyAdCampaign(row.id)
+    ElMessage.success('已复制为草稿，请检查后保存')
+    await fetchList()
+    if (can(PERM.AdCampaignUpdate)) await formDialog.value?.openEdit(data.id)
   } catch (e) {
-    showApiError(e, '加载日报失败')
-  } finally {
-    statsLoading.value = false
+    showApiError(e, '复制失败')
   }
 }
 
-onMounted(fetchList)
+async function handleBatchPause() {
+  const rows = selected.value.filter((r) => r.status === AD_STATUS.Active)
+  if (!rows.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定暂停选中的 ${rows.length} 条投放中计划？暂停后立即停止展示。`,
+      '批量暂停',
+      { type: 'warning', confirmButtonText: '暂停' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const { data } = await batchPauseAdCampaigns(rows.map((r) => r.id))
+    const skipped = data.skipped ? `，${data.skipped} 条因状态已变化未处理` : ''
+    ElMessage.success(`已暂停 ${data.paused} 条${skipped}`)
+    selected.value = []
+    await fetchList()
+  } catch (e) {
+    showApiError(e, '批量暂停失败')
+  }
+}
+
+function openStats(row: AdCampaignItem) {
+  statsCampaign.value = { id: row.id, title: row.title }
+  statsVisible.value = true
+}
 </script>
+
+<style scoped>
+.batch-hint {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+</style>

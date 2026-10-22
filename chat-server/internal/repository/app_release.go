@@ -21,9 +21,10 @@ type AppReleaseRepository interface {
 	GetByPlatformVersion(ctx context.Context, platform, version string) (*model.AppRelease, error)
 	GetCurrent(ctx context.Context, platform string) (*model.AppRelease, error)
 	ListCurrent(ctx context.Context) ([]*model.AppRelease, error)
-	List(ctx context.Context, platform string) ([]*model.AppRelease, error)
+	List(ctx context.Context, platform string, page, pageSize int) ([]*model.AppRelease, int64, error)
 	SetCurrent(ctx context.Context, platform string, id uint) error
 	ClearCurrent(ctx context.Context, id uint) error
+	DeleteNotCurrent(ctx context.Context, id uint) error
 }
 
 type appReleaseRepository struct {
@@ -77,14 +78,30 @@ func (r *appReleaseRepository) ListCurrent(ctx context.Context) ([]*model.AppRel
 	return list, err
 }
 
-func (r *appReleaseRepository) List(ctx context.Context, platform string) ([]*model.AppRelease, error) {
+func (r *appReleaseRepository) List(ctx context.Context, platform string, page, pageSize int) ([]*model.AppRelease, int64, error) {
 	db := database.Conn(ctx, r.db).Model(&model.AppRelease{})
 	if platform != "" {
 		db = db.Where("platform = ?", platform)
 	}
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	var list []*model.AppRelease
-	err := db.Order("created_at DESC").Limit(200).Find(&list).Error
-	return list, err
+	err := db.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	return list, total, err
+}
+
+// DeleteNotCurrent 删除非当前对外的版本记录；记录不存在或为当前版本时返回 gorm.ErrRecordNotFound。
+func (r *appReleaseRepository) DeleteNotCurrent(ctx context.Context, id uint) error {
+	res := database.Conn(ctx, r.db).Where("id = ? AND is_current = 0", id).Delete(&model.AppRelease{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *appReleaseRepository) SetCurrent(ctx context.Context, platform string, id uint) error {

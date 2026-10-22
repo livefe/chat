@@ -1,15 +1,15 @@
 <script setup lang="ts">
-defineProps<{ title: string }>()
+defineProps<{ title?: string }>()
 </script>
 
 <template>
   <div class="im-chat-hd">
-    <div>
+    <div class="im-chat-hd__info">
       <div class="im-chat-hd__title">
-        {{ title }}
+        <slot name="title">{{ title }}</slot>
         <slot name="tags" />
       </div>
-      <div class="im-chat-hd__sub">
+      <div v-if="$slots.sub" class="im-chat-hd__sub">
         <slot name="sub" />
       </div>
     </div>

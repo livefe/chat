@@ -3,6 +3,7 @@
     :data="list"
     highlight-current-row
     empty-text="暂无下级区划"
+    :row-class-name="rowClassName"
     @row-click="(row: RegionItem) => canViewDetail && emit('detail', row)"
   >
     <el-table-column prop="name" label="名称" min-width="160" />
@@ -16,7 +17,7 @@
       <template #default="{ row }">
         <div class="action-cell" @click.stop>
           <el-button
-            v-if="row.level < 3"
+            v-if="row.level < REGION_LEAF_LEVEL"
             type="primary"
             link
             size="small"
@@ -41,15 +42,26 @@
 
 <script setup lang="ts">
 import type { RegionItem } from '@/api/region'
-import { regionLevelText } from '@/constants/region'
+import { REGION_LEAF_LEVEL, regionLevelText } from '@/constants/region'
 
-defineProps<{
+const props = defineProps<{
   list: RegionItem[]
   canViewDetail: boolean
+  highlightCode?: string
 }>()
 
 const emit = defineEmits<{
   enter: [row: RegionItem]
   detail: [row: RegionItem]
 }>()
+
+function rowClassName({ row }: { row: RegionItem }) {
+  return props.highlightCode && row.code === props.highlightCode ? 'is-located' : ''
+}
 </script>
+
+<style scoped>
+:deep(.el-table__row.is-located > td.el-table__cell) {
+  background-color: var(--el-color-warning-light-9);
+}
+</style>

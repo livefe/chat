@@ -39,3 +39,30 @@ export function readAdminStorage() {
 }
 
 type EmployeeInfoLike = Record<string, unknown>
+
+export interface RecentVisit {
+  path: string
+  title: string
+}
+
+const RECENT_VISITS_PREFIX = 'admin_recent_visits:'
+const RECENT_VISITS_MAX = 6
+
+/** 最近访问按员工分别保存，退出登录不清除。 */
+export function readRecentVisits(employeeId: number): RecentVisit[] {
+  const list = readJsonStorage<unknown>(RECENT_VISITS_PREFIX + employeeId, [])
+  if (!Array.isArray(list)) return []
+  return list.filter(
+    (v): v is RecentVisit =>
+      !!v && typeof v.path === 'string' && typeof v.title === 'string' && v.path.startsWith('/'),
+  )
+}
+
+export function pushRecentVisit(employeeId: number, visit: RecentVisit) {
+  const list = readRecentVisits(employeeId).filter((v) => v.path !== visit.path)
+  list.unshift(visit)
+  localStorage.setItem(
+    RECENT_VISITS_PREFIX + employeeId,
+    JSON.stringify(list.slice(0, RECENT_VISITS_MAX)),
+  )
+}

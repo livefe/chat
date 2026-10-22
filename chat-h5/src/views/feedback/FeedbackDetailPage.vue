@@ -57,9 +57,13 @@ onMounted(async () => {
         </div>
       </van-cell-group>
 
-      <van-cell-group v-if="detail.reply || detail.handledAt" inset class="section reply-block">
+      <van-cell-group
+        v-if="detail.handleResult || detail.handledAt"
+        inset
+        class="section reply-block"
+      >
         <van-cell title="处理结果" />
-        <van-cell v-if="detail.reply" title="处理说明" :label="detail.reply" />
+        <van-cell v-if="detail.handleResult" title="处理说明" :label="detail.handleResult" />
         <van-cell v-if="detail.handledAt" title="处理时间" :value="detail.handledAt" />
       </van-cell-group>
       <van-cell-group v-else inset class="section">

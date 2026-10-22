@@ -122,12 +122,6 @@ func (h *Hub[ID]) CountByID(id ID) int {
 	return len(h.byID[id])
 }
 
-func (h *Hub[ID]) HasID(id ID) bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.byID[id]) > 0
-}
-
 func (h *Hub[ID]) ConnsByID(id ID) []*Conn {
 	h.mu.RLock()
 	set := h.byID[id]

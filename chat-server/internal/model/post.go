@@ -30,6 +30,9 @@ type Post struct {
 	EndAt               int64          `gorm:"type:bigint;not null;default:0;index;comment:结束/截止时间(秒)" json:"endAt"`
 	Status              uint8          `gorm:"type:tinyint unsigned;not null;default:0;index;comment:状态(0待审核 1发布中 2驳回 3下架)" json:"status"`
 	DiscussMessageCount uint           `gorm:"type:int unsigned;not null;default:0;comment:可见讨论消息数" json:"discussMessageCount"`
+	AuditRemark         string         `gorm:"type:varchar(200);not null;default:'';comment:审核/下架说明" json:"auditRemark"`
+	AuditedBy           uint           `gorm:"type:int unsigned;not null;default:0;comment:最近审核员工ID" json:"auditedBy"`
+	AuditedAt           int64          `gorm:"type:bigint;not null;default:0;comment:最近审核时间(秒)" json:"auditedAt"`
 }
 
 func (Post) TableName() string { return "post" }

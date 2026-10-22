@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 
 	"app/internal/model"
 	"app/internal/repository"
@@ -12,8 +12,6 @@ import (
 	"app/pkg/errs"
 	"app/pkg/logger"
 	"app/pkg/utils"
-
-	"gorm.io/gorm"
 )
 
 var roleStatusText = map[uint8]string{
@@ -131,31 +129,30 @@ func (s *RoleService) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-func (s *RoleService) Get(ctx context.Context, id uint) (*types.RoleItem, error) {
-	role, err := s.roleRepo.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errs.NotFound("角色不存在")
-		}
-		return nil, fmt.Errorf("查询角色失败: %w", err)
-	}
-	item := toRoleItem(role)
-	return &item, nil
-}
-
 func (s *RoleService) List(ctx context.Context, req *types.RoleListRequest) (*types.RoleListResponse, error) {
 	roles, total, err := s.roleRepo.List(ctx, repository.RoleListFilter{
-		Name: req.Name, Code: req.Code, Status: req.Status,
+		Name: strings.TrimSpace(req.Name), Code: strings.TrimSpace(req.Code), Status: req.Status,
 		Page: req.Page, PageSize: req.PageSize,
 	})
 	if err != nil {
 		s.log.Error(ctx, "查询角色列表失败", logger.Error(err))
 		return nil, fmt.Errorf("查询角色列表失败: %w", err)
 	}
+	roleIDs := make([]uint, 0, len(roles))
+	for _, r := range roles {
+		roleIDs = append(roleIDs, r.ID)
+	}
+	memberCounts, err := s.employeeRoleRepo.CountGroupByRoleIDs(ctx, roleIDs)
+	if err != nil {
+		s.log.Error(ctx, "统计角色成员失败", logger.Error(err))
+		return nil, fmt.Errorf("查询角色列表失败: %w", err)
+	}
 
 	list := make([]types.RoleItem, 0, len(roles))
 	for _, r := range roles {
-		list = append(list, toRoleItem(r))
+		item := toRoleItem(r)
+		item.MemberCount = memberCounts[r.ID]
+		list = append(list, item)
 	}
 	return &types.RoleListResponse{Total: total, List: list}, nil
 }
@@ -189,61 +186,75 @@ func (s *RoleService) AssignPermissions(ctx context.Context, operatorID uint, re
 		return errs.NotFound("角色不存在")
 	}
 
-	if len(req.PermissionIDs) > 0 {
-		perms, err := s.permissionRepo.GetByIDs(ctx, req.PermissionIDs)
+	requested := uniqueUints(req.PermissionIDs)
+	if len(requested) > 0 {
+		perms, err := s.permissionRepo.GetByIDs(ctx, requested)
 		if err != nil {
 			return fmt.Errorf("查询权限失败: %w", err)
 		}
-		if len(perms) != len(req.PermissionIDs) {
+		if len(perms) != len(requested) {
 			return errs.NotFound("部分权限不存在")
 		}
-		capabilityIDs := make([]uint, 0, len(perms))
 		for _, p := range perms {
 			if !isCapabilityType(p.Type) {
-				return errs.Invalid("接口权限不可分配，请只勾选菜单/按钮/数据权限")
-			}
-			capabilityIDs = append(capabilityIDs, p.ID)
-		}
-		req.PermissionIDs = capabilityIDs
-		isSuper, err := s.permSvc.IsSuperAdmin(ctx, operatorID)
-		if err != nil {
-			return fmt.Errorf("校验操作者权限失败: %w", err)
-		}
-		if !isSuper {
-			allowed, err := s.permSvc.EnabledPermissions(ctx, operatorID)
-			if err != nil {
-				return fmt.Errorf("校验操作者权限失败: %w", err)
-			}
-			allowSet := make(map[uint]struct{}, len(allowed))
-			for _, p := range allowed {
-				allowSet[p.ID] = struct{}{}
-			}
-			for _, id := range req.PermissionIDs {
-				if _, ok := allowSet[id]; !ok {
-					return errs.Forbidden("不能分配超出自身权限范围的权限")
-				}
+				return errs.Invalid("接口权限不可分配，请只勾选菜单或按钮权限")
 			}
 		}
 	}
 
-	if len(req.PermissionIDs) == 0 {
-		if err := s.rolePermissionRepo.ReplaceByRoleID(ctx, req.RoleID, nil); err != nil {
-			s.log.Error(ctx, "清空角色权限失败", logger.Error(err), logger.Uint("roleId", req.RoleID))
-			return fmt.Errorf("分配权限失败: %w", err)
-		}
-		s.permSvc.InvalidateAllEmployeePermCache(ctx)
-		return nil
+	finalIDs, err := s.scopePermissionIDs(ctx, operatorID, req.RoleID, requested)
+	if err != nil {
+		return err
 	}
 
-	items := make([]*model.RolePermission, 0, len(req.PermissionIDs))
-	for _, pid := range req.PermissionIDs {
+	items := make([]*model.RolePermission, 0, len(finalIDs))
+	for _, pid := range finalIDs {
 		items = append(items, &model.RolePermission{RoleID: req.RoleID, PermissionID: pid})
 	}
 	if err := s.rolePermissionRepo.ReplaceByRoleID(ctx, req.RoleID, items); err != nil {
+		s.log.Error(ctx, "分配角色权限失败", logger.Error(err), logger.Uint("roleId", req.RoleID))
 		return fmt.Errorf("分配权限失败: %w", err)
 	}
 	s.permSvc.InvalidateAllEmployeePermCache(ctx)
 	return nil
+}
+
+// scopePermissionIDs 只在操作者自身权限范围内调整；角色原有的、超出操作者范围的权限原样保留。
+func (s *RoleService) scopePermissionIDs(ctx context.Context, operatorID, roleID uint, requested []uint) ([]uint, error) {
+	isSuper, err := s.permSvc.IsSuperAdmin(ctx, operatorID)
+	if err != nil {
+		return nil, fmt.Errorf("校验操作者权限失败: %w", err)
+	}
+	if isSuper {
+		return requested, nil
+	}
+	allowed, err := s.permSvc.EnabledPermissions(ctx, operatorID)
+	if err != nil {
+		return nil, fmt.Errorf("校验操作者权限失败: %w", err)
+	}
+	inScope := make(map[uint]struct{}, len(allowed))
+	for _, p := range allowed {
+		inScope[p.ID] = struct{}{}
+	}
+	existing, err := s.rolePermissionRepo.GetPermissionIDsByRoleID(ctx, roleID)
+	if err != nil {
+		return nil, fmt.Errorf("获取角色权限失败: %w", err)
+	}
+
+	out := make([]uint, 0, len(requested)+len(existing))
+	for _, id := range requested {
+		if _, ok := inScope[id]; ok {
+			out = append(out, id)
+		} else if !containsUint(existing, id) {
+			return nil, errs.Forbidden("不能分配超出自身权限范围的权限")
+		}
+	}
+	for _, id := range existing {
+		if _, ok := inScope[id]; !ok {
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 func toRoleItem(r *model.Role) types.RoleItem {

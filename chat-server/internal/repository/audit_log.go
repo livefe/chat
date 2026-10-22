@@ -11,14 +11,18 @@ import (
 )
 
 type AuditLogListFilter struct {
-	EmployeeID *uint
-	Module     string
-	Action     string
-	Keyword    string
-	StartTime  *time.Time
-	EndTime    *time.Time
-	Page       int
-	PageSize   int
+	EmployeeID  *uint
+	Module      string
+	Action      string
+	TargetType  string
+	TargetID    *uint
+	RequestPath string
+	Success     *bool
+	Keyword     string
+	StartTime   *time.Time
+	EndTime     *time.Time
+	Page        int
+	PageSize    int
 }
 
 type AuditLogRepository interface {
@@ -57,11 +61,23 @@ func applyAuditLogListFilter(db *gorm.DB, f AuditLogListFilter) *gorm.DB {
 	if f.Action != "" {
 		db = db.Where("action = ?", f.Action)
 	}
+	if f.TargetType != "" {
+		db = db.Where("target_type = ?", f.TargetType)
+	}
+	if f.TargetID != nil {
+		db = db.Where("target_id = ?", *f.TargetID)
+	}
+	if f.RequestPath != "" {
+		db = db.Where("request_path LIKE ?", "%"+f.RequestPath+"%")
+	}
+	if f.Success != nil {
+		db = db.Where("success = ?", *f.Success)
+	}
 	if f.Keyword != "" {
 		kw := "%" + f.Keyword + "%"
 		db = db.Where(
-			"employee_name LIKE ? OR employee_mobile LIKE ? OR target_label LIKE ? OR action_text LIKE ? OR detail LIKE ?",
-			kw, kw, kw, kw, kw,
+			"employee_name LIKE ? OR employee_mobile LIKE ? OR target_label LIKE ? OR action_text LIKE ? OR request_path LIKE ? OR detail LIKE ?",
+			kw, kw, kw, kw, kw, kw,
 		)
 	}
 	if f.StartTime != nil {

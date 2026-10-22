@@ -142,11 +142,24 @@ func (h *RoomHandler) AdminRoomAudit(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.roomSvc.AdminAudit(c.Request.Context(), req.ID, req.Approve); err != nil {
+	if err := h.roomSvc.AdminAudit(c.Request.Context(), middleware.CurrentEmployeeID(c), &req); err != nil {
 		response.WriteError(c, err)
 		return
 	}
 	response.Success(c, "审核完成", nil)
+}
+
+func (h *RoomHandler) AdminRoomBatchAudit(c *gin.Context) {
+	var req types.BatchAuditRoomRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	result, err := h.roomSvc.AdminBatchAudit(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "批量审核完成", result)
 }
 
 func (h *RoomHandler) AdminRoomNeighbors(c *gin.Context) {

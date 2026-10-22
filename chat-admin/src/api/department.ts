@@ -11,7 +11,10 @@ export interface DepartmentItem {
   statusText: string
   sort: number
   remark: string
+  /** 直属员工数 */
   employeeCount: number
+  /** 含全部下级部门的员工数 */
+  totalEmployeeCount: number
   createdAt: string
   updatedAt: string
   children?: DepartmentItem[]
@@ -23,17 +26,12 @@ export interface DepartmentOption {
   children?: DepartmentOption[]
 }
 
-export interface DepartmentListRequest {
-  name?: string
-  status?: number
-}
-
 export interface DepartmentTreeResponse {
   list: DepartmentItem[]
 }
 
-export const getDepartmentList = (params?: DepartmentListRequest) =>
-  request.get<DepartmentTreeResponse>('/api/admin/department/list', params)
+export const getDepartmentList = () =>
+  request.get<DepartmentTreeResponse>('/api/admin/department/list')
 
 export const getDepartmentOptions = () =>
   request.get<DepartmentOption[]>('/api/admin/department/options')

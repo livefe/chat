@@ -12,7 +12,7 @@ export interface FeedbackItem {
   images: string[]
   status: number
   statusText: string
-  reply: string
+  handleResult: string
   employeeId: number
   employeeName?: string
   handledAt: string
@@ -25,7 +25,10 @@ export interface FeedbackListRequest {
   pageSize: number
   status?: number
   type?: number
+  userId?: number
   keyword?: string
+  startTime?: string
+  endTime?: string
 }
 
 export interface FeedbackListResponse {
@@ -36,7 +39,7 @@ export interface FeedbackListResponse {
 export interface UpdateFeedbackStatusRequest {
   id: number
   status: number
-  reply?: string
+  handleResult: string
 }
 
 export const getFeedbackList = (params: FeedbackListRequest) =>
@@ -47,3 +50,9 @@ export const getFeedbackDetail = (id: number) =>
 
 export const updateFeedbackStatus = (data: UpdateFeedbackStatusRequest) =>
   request.post('/api/admin/feedback/update/status', data)
+
+export const batchCloseFeedback = (ids: number[], handleResult: string) =>
+  request.post<{ updated: number; skipped: number }>('/api/admin/feedback/batch/close', {
+    ids,
+    handleResult,
+  })

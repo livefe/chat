@@ -1,36 +1,61 @@
 <template>
-  <el-table :data="list" v-loading="loading" empty-text="暂无动态">
-    <el-table-column prop="id" label="ID" width="70" />
+  <el-table
+    :data="list"
+    v-loading="loading"
+    row-key="id"
+    @selection-change="(rows: PostItem[]) => emit('selection-change', rows)"
+  >
+    <template #empty>
+      <TableEmpty :error="error" text="暂无帖子" @retry="emit('page-change')" />
+    </template>
+    <el-table-column
+      v-if="selectable"
+      type="selection"
+      width="42"
+      :selectable="(row: PostItem) => !row.deleted"
+    />
+    <el-table-column label="ID" width="90">
+      <template #default="{ row }"><CopyText :text="row.id" /></template>
+    </el-table-column>
     <el-table-column label="类型" width="90">
       <template #default="{ row }">
         <el-tag size="small">{{ postCategoryLabel(row.category) }}</el-tag>
-        <el-tag v-if="row.pinned" size="small" type="warning" class="pin-tag">置顶</el-tag>
+        <el-tag v-if="row.pinned" size="small" type="warning" class="ml-4">置顶</el-tag>
       </template>
     </el-table-column>
-    <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
-    <el-table-column label="归属" width="120">
+    <el-table-column label="标题" min-width="180" show-overflow-tooltip>
+      <template #default="{ row }">
+        <el-tag v-if="row.deleted" size="small" type="info" class="mr-4">已删除</el-tag>
+        <span>{{ row.title }}</span>
+      </template>
+    </el-table-column>
+    <el-table-column label="归属" width="140">
       <template #default="{ row }">
         <template v-if="row.roomId > 0">
           <el-button
             v-if="can(PERM.ChatRoom)"
             type="primary"
             link
+            class="room-link"
             @click="emit('go-room', row.roomId)"
           >
-            区 #{{ row.roomId }}
+            {{ row.roomName || `聊天区 #${row.roomId}` }}
           </el-button>
-          <span v-else class="sub">区 #{{ row.roomId }}</span>
+          <span v-else>{{ row.roomName || `聊天区 #${row.roomId}` }}</span>
+          <div class="sub">#{{ row.roomId }}</div>
         </template>
         <span v-else class="sub">独立帖</span>
       </template>
     </el-table-column>
-    <el-table-column label="发布者" width="130">
+    <el-table-column label="发布者" min-width="150">
       <template #default="{ row }">
-        <div>{{ row.publisher?.nickname || '-' }}</div>
-        <div class="sub">ID {{ row.publisherId }}</div>
+        <UserCell
+          :user-id="row.publisherId"
+          :nickname="row.publisher?.nickname"
+          :mobile="row.publisherMobile"
+        />
       </template>
     </el-table-column>
-    <el-table-column prop="placeName" label="地点" width="120" show-overflow-tooltip />
     <el-table-column label="附属信息" width="140">
       <template #default="{ row }">
         <el-tag
@@ -46,19 +71,26 @@
     </el-table-column>
     <el-table-column label="状态" width="90">
       <template #default="{ row }">
-        <el-tag :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
+        <el-tooltip
+          v-if="row.auditRemark && row.status !== PostStatus.Published"
+          :content="`原因：${row.auditRemark}`"
+          placement="top"
+        >
+          <el-tag :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
+        </el-tooltip>
+        <el-tag v-else :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
       </template>
     </el-table-column>
-    <el-table-column label="时间" width="170">
+    <el-table-column label="发布时间" width="170">
       <template #default="{ row }">
-        <template v-if="row.startAt || row.endAt">
-          <div>{{ formatUnixSeconds(row.startAt) }}</div>
-          <div class="sub">至 {{ formatUnixSeconds(row.endAt) }}</div>
-        </template>
-        <span v-else class="sub">{{ row.createdAt }}</span>
+        <div>{{ row.createdAt }}</div>
+        <div v-if="row.startAt || row.endAt" class="sub">
+          活动 {{ formatUnixSecondsShort(row.startAt) || '-' }} ~
+          {{ formatUnixSecondsShort(row.endAt) || '-' }}
+        </div>
       </template>
     </el-table-column>
-    <el-table-column label="操作" min-width="260" fixed="right">
+    <el-table-column label="操作" min-width="240" fixed="right">
       <template #default="{ row }">
         <div class="action-cell">
           <el-button
@@ -68,7 +100,7 @@
             type="primary"
             @click="emit('detail', row as PostItem)"
           >
-            详情
+            {{ row.status === PostStatus.Pending && canAudit(row as PostItem) ? '审核' : '详情' }}
           </el-button>
           <el-button
             v-if="row.extras?.needSignup && can(PERM.PostPostDetail)"
@@ -88,24 +120,29 @@
           >
             消息
           </el-button>
-          <el-button
-            v-if="row.status === PostStatus.Pending && can(PERM.PostPostStatus)"
-            size="small"
-            link
-            type="warning"
-            @click="emit('detail', row as PostItem)"
-          >
-            审核
-          </el-button>
-          <el-button
-            v-if="row.status === PostStatus.Published && can(PERM.PostPostStatus)"
-            size="small"
-            link
-            type="danger"
-            @click="emit('status', row as PostItem, PostStatus.Disabled, '下架')"
-          >
-            下架
-          </el-button>
+          <template v-if="can(PERM.PostPostStatus)">
+            <el-button
+              v-if="canChangePostStatus(row as PostItem, PostStatus.Disabled)"
+              size="small"
+              link
+              type="danger"
+              @click="emit('status', row as PostItem, PostStatus.Disabled)"
+            >
+              下架
+            </el-button>
+            <el-button
+              v-if="
+                row.status !== PostStatus.Pending &&
+                canChangePostStatus(row as PostItem, PostStatus.Published)
+              "
+              size="small"
+              link
+              type="success"
+              @click="emit('status', row as PostItem, PostStatus.Published)"
+            >
+              恢复上架
+            </el-button>
+          </template>
         </div>
       </template>
     </el-table-column>
@@ -126,9 +163,13 @@
 
 <script setup lang="ts">
 import { type PostItem } from '@/api/post'
+import CopyText from '@/components/common/CopyText.vue'
+import TableEmpty from '@/components/common/TableEmpty.vue'
+import UserCell from '@/components/common/UserCell.vue'
 import { PAGE_SIZES, PAGINATION_LAYOUT } from '@/constants'
-import { formatUnixSeconds } from '@/utils/datetime'
+import { formatUnixSecondsShort } from '@/utils/datetime'
 import {
+  canChangePostStatus,
   extraTagType,
   formatExtraBrief,
   postCategoryLabel,
@@ -142,7 +183,9 @@ import { usePermission } from '@/composables/usePermission'
 defineProps<{
   list: PostItem[]
   loading: boolean
+  error?: boolean
   total: number
+  selectable?: boolean
 }>()
 
 const page = defineModel<number>('page', { required: true })
@@ -153,15 +196,30 @@ const emit = defineEmits<{
   signup: [row: PostItem]
   messages: [postId: number]
   'go-room': [roomId: number]
-  status: [row: PostItem, status: PostStatus, action: string]
+  status: [row: PostItem, status: PostStatus]
+  'selection-change': [rows: PostItem[]]
   'page-change': []
 }>()
 
 const { can } = usePermission()
+
+function canAudit(row: PostItem) {
+  return can(PERM.PostPostStatus) && !row.deleted
+}
 </script>
 
 <style scoped>
-.pin-tag {
+.ml-4 {
   margin-left: 4px;
+}
+
+.mr-4 {
+  margin-right: 4px;
+}
+
+.room-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

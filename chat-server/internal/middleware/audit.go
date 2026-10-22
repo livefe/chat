@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 
 	"app/internal/service"
 	"app/pkg/logger"
@@ -13,6 +14,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// 高频聊天类接口不记录操作审计，格式为 "METHOD 路由"。
+var auditExcludedRoutes = []string{
+	"POST /api/admin/im/conversations/dm",
+	"POST /api/admin/im/messages",
+	"POST /api/admin/im/read",
+	"POST /api/admin/support/messages",
+	"POST /api/admin/support/read",
+}
 
 type captureResponseWriter struct {
 	gin.ResponseWriter
@@ -25,8 +35,9 @@ func (w *captureResponseWriter) Write(b []byte) (int, error) {
 }
 
 func AuditMiddleware(log *logger.Logger, auditSvc *service.AuditLogService) gin.HandlerFunc {
+	auditSvc.ExcludeRoutes(auditExcludedRoutes...)
 	return func(c *gin.Context) {
-		if c.Request.Method != http.MethodPost {
+		if c.Request.Method != http.MethodPost || auditSvc.Excluded(c.Request.Method, c.FullPath()) {
 			c.Next()
 			return
 		}
@@ -46,14 +57,6 @@ func AuditMiddleware(log *logger.Logger, auditSvc *service.AuditLogService) gin.
 			return
 		}
 
-		success := false
-		if writer.Status() == http.StatusOK {
-			var resp response.Response
-			if err := json.Unmarshal(writer.body.Bytes(), &resp); err == nil && resp.Code == response.CodeSuccess {
-				success = true
-			}
-		}
-
 		input := service.AuditLogInput{
 			EmployeeID:    employeeID,
 			RequestPath:   c.FullPath(),
@@ -61,7 +64,15 @@ func AuditMiddleware(log *logger.Logger, auditSvc *service.AuditLogService) gin.
 			RequestBody:   append([]byte(nil), bodyBytes...),
 			IP:            c.ClientIP(),
 			UserAgent:     c.Request.UserAgent(),
-			Success:       success,
+		}
+		var resp response.Response
+		if err := json.Unmarshal(writer.body.Bytes(), &resp); err == nil {
+			input.Success = writer.Status() == http.StatusOK && resp.Code == response.CodeSuccess
+			input.ResultCode = resp.Code
+			input.ResultMessage = resp.Message
+		} else {
+			input.ResultCode = writer.Status()
+			input.ResultMessage = "HTTP " + strconv.Itoa(writer.Status())
 		}
 		go auditSvc.Record(context.Background(), input)
 	}

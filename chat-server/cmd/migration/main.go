@@ -48,6 +48,7 @@ func migrate(in *container.Infra) int {
 		&model.Feedback{},
 		&model.Report{},
 		&model.UserDeactivationLog{},
+		&model.UserPunishment{},
 		&model.AuditLog{},
 		&model.Post{},
 		&model.PostExtra{},

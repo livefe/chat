@@ -24,9 +24,39 @@
           <span class="label">来源</span>
           <span>{{ detail.sourceText || '-' }}</span>
         </div>
-        <div v-if="detail.description" class="audit-meta__row">
+        <div class="audit-meta__row">
+          <span class="label">申请人</span>
+          <UserCell
+            v-if="detail.source === RoomSource.User"
+            :user-id="detail.userId"
+            :nickname="detail.creatorNickname"
+            :mobile="detail.creatorMobile"
+          />
+          <span v-else>{{ detail.employeeName || '-' }}（后台员工）</span>
+        </div>
+        <div class="audit-meta__row">
+          <span class="label">申请时间</span>
+          <span>{{ detail.createdAt }}</span>
+        </div>
+        <div class="audit-meta__row">
+          <span class="label">中心</span>
+          <span>{{ detail.centerLat.toFixed(5) }}, {{ detail.centerLng.toFixed(5) }}</span>
+        </div>
+        <div v-if="detail.description" class="audit-meta__row audit-meta__row--wide">
           <span class="label">描述</span>
           <span>{{ detail.description }}</span>
+        </div>
+        <div
+          v-if="detail.status === RoomStatus.Rejected"
+          class="audit-meta__row audit-meta__row--wide"
+        >
+          <span class="label">上次驳回</span>
+          <span>
+            {{ detail.auditRemark || '-' }}
+            <span class="muted">
+              （{{ detail.auditedByName || '-' }} · {{ detail.auditedAt || '-' }}）
+            </span>
+          </span>
         </div>
       </div>
 
@@ -104,10 +134,13 @@ import { computed, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 
 import AmapPicker from '@/components/amap/AmapPicker.vue'
+import UserCell from '@/components/common/UserCell.vue'
 import type { MapRoomOverlay } from '@/utils/mapOverlay'
 import { getRoomDetail, getRoomNeighbors, type RoomDetail, type RoomNeighborItem } from '@/api/room'
+import { RoomSource, RoomStatus } from '@/constants/room'
 import { showApiError } from '@/utils/apiError'
 import { hasCoordinates, wgs84ToGcj02 } from '@/utils/geo'
+import { confirmWithReason } from '@/utils/promptReason'
 
 const props = defineProps<{
   visible: boolean
@@ -118,7 +151,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   approve: []
-  reject: []
+  reject: [reason: string]
 }>()
 
 const loading = ref(false)
@@ -155,10 +188,12 @@ async function confirmApprove() {
 async function confirmReject() {
   if (props.submitting || !canDecide.value) return
   const name = detail.value?.name || '该聊天区'
-  try {
-    await ElMessageBox.confirm(`确认驳回「${name}」？`, '审核驳回', { type: 'warning' })
-    emit('reject')
-  } catch {}
+  const reason = await confirmWithReason(`确认驳回「${name}」？`, {
+    title: '审核驳回',
+    required: true,
+    inputPlaceholder: '请输入驳回原因（申请人可见）',
+  })
+  if (reason !== null) emit('reject', reason)
 }
 
 async function load() {
@@ -260,9 +295,12 @@ watch(
   font-size: 13px;
   color: var(--el-text-color-primary);
 }
+.audit-meta__row--wide {
+  grid-column: 1 / -1;
+}
 .audit-meta__row .label {
   flex-shrink: 0;
-  width: 40px;
+  width: 56px;
   color: var(--el-text-color-secondary);
 }
 .neighbors__title {

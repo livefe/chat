@@ -11,13 +11,23 @@ import (
 )
 
 type ReportListFilter struct {
-	ReporterID *uint
-	Status     *uint8
-	TargetType *uint8
-	Reason     *uint8
-	Keyword    string
-	Page       int
-	PageSize   int
+	ReporterID   uint
+	TargetUserID uint
+	TargetID     uint
+	Status       *uint8
+	TargetType   *uint8
+	Reason       *uint8
+	Keyword      string
+	StartTime    string
+	EndTime      string
+	OldestFirst  bool
+	Page         int
+	PageSize     int
+}
+
+type ReportTargetKey struct {
+	TargetType uint8
+	TargetID   uint
 }
 
 type ReportRepository interface {
@@ -27,8 +37,10 @@ type ReportRepository interface {
 	List(ctx context.Context, f ReportListFilter) ([]*model.Report, int64, error)
 	CountByReporterTargetSince(ctx context.Context, reporterID uint, targetType uint8, targetID uint, since time.Time) (int64, error)
 	CountByReporterBetween(ctx context.Context, reporterID uint, start, end time.Time) (int64, error)
-	CountByTarget(ctx context.Context, targetType uint8, targetID uint) (int64, error)
+	CountByTargets(ctx context.Context, keys []ReportTargetKey) (map[ReportTargetKey]int64, error)
+	CountByTargetUser(ctx context.Context, userID uint) (int64, error)
 	CountByStatus(ctx context.Context, status uint8) (int64, error)
+	ResolvePendingByTarget(ctx context.Context, key ReportTargetKey, excludeID uint, updates map[string]any) (int64, error)
 }
 
 type reportRepository struct {
@@ -56,8 +68,14 @@ func (r *reportRepository) GetByID(ctx context.Context, id uint) (*model.Report,
 }
 
 func applyReportListFilter(db *gorm.DB, f ReportListFilter) *gorm.DB {
-	if f.ReporterID != nil {
-		db = db.Where("reporter_id = ?", *f.ReporterID)
+	if f.ReporterID > 0 {
+		db = db.Where("reporter_id = ?", f.ReporterID)
+	}
+	if f.TargetUserID > 0 {
+		db = db.Where("target_user_id = ?", f.TargetUserID)
+	}
+	if f.TargetID > 0 {
+		db = db.Where("target_id = ?", f.TargetID)
 	}
 	if f.Status != nil {
 		db = db.Where("`status` = ?", *f.Status)
@@ -72,6 +90,12 @@ func applyReportListFilter(db *gorm.DB, f ReportListFilter) *gorm.DB {
 		kw := "%" + f.Keyword + "%"
 		db = db.Where("content LIKE ? OR handle_result LIKE ?", kw, kw)
 	}
+	if f.StartTime != "" {
+		db = db.Where("created_at >= ?", f.StartTime)
+	}
+	if f.EndTime != "" {
+		db = db.Where("created_at <= ?", f.EndTime)
+	}
 	return db
 }
 
@@ -83,8 +107,12 @@ func (r *reportRepository) List(ctx context.Context, f ReportListFilter) ([]*mod
 		return nil, 0, err
 	}
 
+	order := "id DESC"
+	if f.OldestFirst {
+		order = "id ASC"
+	}
 	var list []*model.Report
-	if err := db.Order("created_at DESC").
+	if err := db.Order(order).
 		Offset((f.Page - 1) * f.PageSize).
 		Limit(f.PageSize).
 		Find(&list).Error; err != nil {
@@ -109,16 +137,50 @@ func (r *reportRepository) CountByReporterBetween(ctx context.Context, reporterI
 	return count, err
 }
 
-func (r *reportRepository) CountByTarget(ctx context.Context, targetType uint8, targetID uint) (int64, error) {
-	var count int64
+func (r *reportRepository) CountByTargets(ctx context.Context, keys []ReportTargetKey) (map[ReportTargetKey]int64, error) {
+	out := make(map[ReportTargetKey]int64, len(keys))
+	if len(keys) == 0 {
+		return out, nil
+	}
+	pairs := make([][]any, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, []any{k.TargetType, k.TargetID})
+	}
+	var rows []struct {
+		TargetType uint8
+		TargetID   uint
+		Total      int64
+	}
 	err := database.Conn(ctx, r.db).Model(&model.Report{}).
-		Where("target_type = ? AND target_id = ?", targetType, targetID).
-		Count(&count).Error
-	return count, err
+		Select("target_type, target_id, COUNT(*) AS total").
+		Where("(target_type, target_id) IN ?", pairs).
+		Group("target_type, target_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[ReportTargetKey{TargetType: row.TargetType, TargetID: row.TargetID}] = row.Total
+	}
+	return out, nil
+}
+
+func (r *reportRepository) CountByTargetUser(ctx context.Context, userID uint) (int64, error) {
+	var n int64
+	err := database.Conn(ctx, r.db).Model(&model.Report{}).Where("target_user_id = ?", userID).Count(&n).Error
+	return n, err
 }
 
 func (r *reportRepository) CountByStatus(ctx context.Context, status uint8) (int64, error) {
 	var n int64
 	err := database.Conn(ctx, r.db).Model(&model.Report{}).Where("status = ?", status).Count(&n).Error
 	return n, err
+}
+
+func (r *reportRepository) ResolvePendingByTarget(ctx context.Context, key ReportTargetKey, excludeID uint, updates map[string]any) (int64, error) {
+	res := database.Conn(ctx, r.db).Model(&model.Report{}).
+		Where("target_type = ? AND target_id = ? AND id <> ? AND `status` = ?",
+			key.TargetType, key.TargetID, excludeID, model.ReportStatusPending).
+		Updates(updates)
+	return res.RowsAffected, res.Error
 }

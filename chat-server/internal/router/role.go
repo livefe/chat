@@ -12,7 +12,6 @@ func registerRoleRoutes(engine *gin.Engine, h *container.Handlers) {
 	role := engine.Group("/api/admin/role", h.EmployeeAuth, h.RequirePermission, h.AuditMiddleware)
 	{
 		role.GET("/list", rh.ListRoles)
-		role.GET("/detail", rh.RoleDetail)
 		role.POST("/create", rh.CreateRole)
 		role.POST("/update", rh.UpdateRole)
 		role.POST("/delete", rh.DeleteRole)

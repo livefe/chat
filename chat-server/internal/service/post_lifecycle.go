@@ -234,6 +234,9 @@ func (s *PostService) Withdraw(ctx context.Context, userID uint, postID uint) er
 		return errs.Forbidden("动态已下架")
 	}
 	p.Status = model.PostStatusDisabled
+	p.AuditRemark = ""
+	p.AuditedBy = 0
+	p.AuditedAt = 0
 	if err := s.postRepo.Update(ctx, p); err != nil {
 		return fmt.Errorf("下架失败: %w", err)
 	}

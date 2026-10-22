@@ -16,6 +16,7 @@ type DeviceRepository interface {
 	DeleteByUserID(ctx context.Context, userID uint) error
 	DeleteByToken(ctx context.Context, vendor, token string) error
 	ListEnabledByUserID(ctx context.Context, userID uint) ([]*model.Device, error)
+	ListByUserID(ctx context.Context, userID uint, page, pageSize int) ([]*model.Device, int64, error)
 }
 
 type deviceRepository struct {
@@ -54,6 +55,19 @@ func (r *deviceRepository) DeleteByToken(ctx context.Context, vendor, token stri
 	return database.Conn(ctx, r.db).
 		Where("vendor = ? AND push_token = ?", vendor, token).
 		Delete(&model.Device{}).Error
+}
+
+func (r *deviceRepository) ListByUserID(ctx context.Context, userID uint, page, pageSize int) ([]*model.Device, int64, error) {
+	db := database.Conn(ctx, r.db).Model(&model.Device{}).Where("user_id = ?", userID)
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []*model.Device
+	if err := db.Order("last_active_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
 }
 
 func (r *deviceRepository) ListEnabledByUserID(ctx context.Context, userID uint) ([]*model.Device, error) {

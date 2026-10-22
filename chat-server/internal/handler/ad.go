@@ -82,16 +82,38 @@ func (h *AdHandler) AdminUpdateStatus(c *gin.Context) {
 	response.Success(c, "更新成功", nil)
 }
 
+func (h *AdHandler) AdminAudit(c *gin.Context) {
+	var req types.AdminAdAuditRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := h.svc.AdminAudit(c.Request.Context(), &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "审核完成", nil)
+}
+
 func (h *AdHandler) AdminBatchPause(c *gin.Context) {
 	var req types.AdminAdBatchPauseRequest
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.svc.AdminBatchPause(c.Request.Context(), req.IDs); err != nil {
+	result, err := h.svc.AdminBatchPause(c.Request.Context(), req.IDs)
+	if err != nil {
 		response.WriteError(c, err)
 		return
 	}
-	response.Success(c, "已暂停", nil)
+	response.Success(c, "", result)
+}
+
+func (h *AdHandler) AdminAdvertisers(c *gin.Context) {
+	result, err := h.svc.AdminListAdvertisers(c.Request.Context())
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.Success(c, "", result)
 }
 
 func (h *AdHandler) AdminCopy(c *gin.Context) {

@@ -1,3 +1,34 @@
+export enum RoomStatus {
+  Pending = 0,
+  Enabled = 1,
+  Rejected = 2,
+  Disabled = 3,
+}
+
+export const ROOM_STATUS_OPTIONS = [
+  { label: '待审核', value: RoomStatus.Pending },
+  { label: '正常', value: RoomStatus.Enabled },
+  { label: '驳回', value: RoomStatus.Rejected },
+  { label: '禁用', value: RoomStatus.Disabled },
+] as const
+
+export enum RoomSource {
+  Admin = 1,
+  User = 2,
+}
+
+export const ROOM_SOURCE_OPTIONS = [
+  { label: '后台', value: RoomSource.Admin },
+  { label: '用户', value: RoomSource.User },
+] as const
+
+export function roomStatusTag(status: number): 'success' | 'warning' | 'info' | 'danger' {
+  if (status === RoomStatus.Enabled) return 'success'
+  if (status === RoomStatus.Pending) return 'warning'
+  if (status === RoomStatus.Rejected) return 'info'
+  return 'danger'
+}
+
 const RoomPlaceType = {
   Community: 1,
   School: 2,

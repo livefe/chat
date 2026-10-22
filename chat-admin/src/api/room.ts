@@ -17,6 +17,14 @@ export interface RoomItem {
   status: number
   statusText: string
   requireGeofence: boolean
+  auditRemark?: string
+  creatorNickname: string
+  creatorMobile: string
+  employeeName: string
+  postCount: number
+  messageCount: number
+  auditedByName: string
+  auditedAt: string
   createdAt: string
   updatedAt: string
 }
@@ -33,6 +41,12 @@ export interface RoomListRequest {
   status?: number
   source?: number
   placeType?: number
+  userId?: number
+}
+
+export interface RoomBatchResult {
+  updated: number
+  skipped: number
 }
 
 export interface RoomListResponse {
@@ -66,8 +80,11 @@ export const createRoom = (data: CreateRoomRequest) => request.post('/api/admin/
 
 export const updateRoom = (data: UpdateRoomRequest) => request.post('/api/admin/room/update', data)
 
-export const auditRoom = (id: number, approve: boolean) =>
-  request.post('/api/admin/room/audit', { id, approve })
+export const auditRoom = (id: number, approve: boolean, reason = '') =>
+  request.post('/api/admin/room/audit', { id, approve, reason })
+
+export const batchAuditRoom = (ids: number[], approve: boolean, reason = '') =>
+  request.post<RoomBatchResult>('/api/admin/room/batch/audit', { ids, approve, reason })
 
 export const updateRoomStatus = (id: number, status: number) =>
   request.post('/api/admin/room/update/status', { id, status })

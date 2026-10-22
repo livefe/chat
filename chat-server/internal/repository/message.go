@@ -12,6 +12,7 @@ import (
 )
 
 type MessageListFilter struct {
+	ID         uint
 	UserID     uint
 	PeerUserID uint
 	RoomID     uint
@@ -22,6 +23,10 @@ type MessageListFilter struct {
 	EndTime    string
 	Page       int
 	PageSize   int
+}
+
+type GeoBox struct {
+	MinLat, MaxLat, MinLng, MaxLng float64
 }
 
 type UserRoomActivity struct {
@@ -38,7 +43,7 @@ type MessageRepository interface {
 	GetByIDUnscoped(ctx context.Context, id uint) (*model.Message, error)
 	Delete(ctx context.Context, id uint) error
 	List(ctx context.Context, f MessageListFilter) ([]*model.Message, int64, error)
-	ListAroundID(ctx context.Context, msg *model.Message, limit int) ([]*model.Message, error)
+	ListContext(ctx context.Context, msg *model.Message, nearby *GeoBox, beforeID, afterID uint, limit int) ([]*model.Message, error)
 	ListUserRoomActivity(ctx context.Context, userID uint, limit int) ([]UserRoomActivity, error)
 	ListRoom(ctx context.Context, roomID uint, beforeID uint, limit int) ([]*model.Message, error)
 	ListPost(ctx context.Context, postID uint, beforeID uint, limit int) ([]*model.Message, error)
@@ -105,14 +110,21 @@ func (r *messageRepository) Delete(ctx context.Context, id uint) error {
 }
 
 func (r *messageRepository) applyAdminFilters(db *gorm.DB, f MessageListFilter) *gorm.DB {
-	if f.UserID > 0 && f.PeerUserID > 0 {
+	if f.ID > 0 {
+		db = db.Where("id = ?", f.ID)
+	}
+	switch {
+	case f.UserID > 0 && f.PeerUserID > 0:
 		db = db.Where("scope = ?", model.MessageScopePrivate).
 			Where(
 				"(from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)",
 				f.UserID, f.PeerUserID, f.PeerUserID, f.UserID,
 			)
-	} else if f.UserID > 0 {
+	case f.UserID > 0:
 		db = db.Where("from_user_id = ? OR to_user_id = ?", f.UserID, f.UserID)
+	case f.PeerUserID > 0:
+		db = db.Where("scope = ?", model.MessageScopePrivate).
+			Where("from_user_id = ? OR to_user_id = ?", f.PeerUserID, f.PeerUserID)
 	}
 	if f.RoomID > 0 {
 		db = db.Where("room_id = ?", f.RoomID)
@@ -136,7 +148,6 @@ func (r *messageRepository) applyAdminFilters(db *gorm.DB, f MessageListFilter) 
 }
 
 func (r *messageRepository) List(ctx context.Context, f MessageListFilter) ([]*model.Message, int64, error) {
-
 	db := r.applyAdminFilters(database.Conn(ctx, r.db).Unscoped().Model(&model.Message{}), f)
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -152,40 +163,60 @@ func (r *messageRepository) List(ctx context.Context, f MessageListFilter) ([]*m
 	return list, total, nil
 }
 
-func (r *messageRepository) ListAroundID(ctx context.Context, msg *model.Message, limit int) ([]*model.Message, error) {
-	db := r.applyAdminFilters(database.Conn(ctx, r.db).Unscoped().Model(&model.Message{}), MessageListFilter{})
+// contextQuery 与 msg 处于同一会话的消息；附近消息按 nearby 区域圈定，缺少区域时只返回自身。
+func (r *messageRepository) contextQuery(ctx context.Context, msg *model.Message, nearby *GeoBox) *gorm.DB {
+	db := database.Conn(ctx, r.db).Unscoped().Model(&model.Message{})
 	switch msg.Scope {
 	case model.MessageScopeRoom:
-		db = db.Where("scope = ? AND room_id = ?", model.MessageScopeRoom, msg.RoomID)
+		return db.Where("scope = ? AND room_id = ?", model.MessageScopeRoom, msg.RoomID)
 	case model.MessageScopePost:
-		db = db.Where("scope = ? AND post_id = ?", model.MessageScopePost, msg.PostID)
+		return db.Where("scope = ? AND post_id = ?", model.MessageScopePost, msg.PostID)
 	case model.MessageScopePrivate:
-		db = db.Where("scope = ?", model.MessageScopePrivate).
+		return db.Where("scope = ?", model.MessageScopePrivate).
 			Where(
 				"(from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)",
 				msg.FromUserID, msg.ToUserID, msg.ToUserID, msg.FromUserID,
 			)
 	case model.MessageScopeNearby:
-		db = db.Where("scope = ?", model.MessageScopeNearby)
+		if nearby == nil {
+			return db.Where("id = ?", msg.ID)
+		}
+		return db.Where("scope = ?", model.MessageScopeNearby).
+			Where("latitude BETWEEN ? AND ?", nearby.MinLat, nearby.MaxLat).
+			Where("longitude BETWEEN ? AND ?", nearby.MinLng, nearby.MaxLng)
 	default:
-		db = db.Where("id = ?", msg.ID)
+		return db.Where("id = ?", msg.ID)
+	}
+}
+
+func (r *messageRepository) ListContext(ctx context.Context, msg *model.Message, nearby *GeoBox, beforeID, afterID uint, limit int) ([]*model.Message, error) {
+	if afterID > 0 {
+		var after []*model.Message
+		err := r.contextQuery(ctx, msg, nearby).Where("id > ?", afterID).Order("id ASC").Limit(limit).Find(&after).Error
+		return after, err
 	}
 
+	pivot, beforeLimit := msg.ID+1, limit+1
+	if beforeID > 0 {
+		pivot, beforeLimit = beforeID, limit
+	}
 	var before []*model.Message
-	if err := db.Where("id <= ?", msg.ID).Order("id DESC").Limit(limit + 1).Find(&before).Error; err != nil {
+	if err := r.contextQuery(ctx, msg, nearby).Where("id < ?", pivot).Order("id DESC").Limit(beforeLimit).Find(&before).Error; err != nil {
 		return nil, err
 	}
-	var after []*model.Message
-	if err := db.Where("id > ?", msg.ID).Order("id ASC").Limit(limit).Find(&after).Error; err != nil {
-		return nil, err
-	}
-
-	out := make([]*model.Message, 0, len(before)+len(after))
+	out := make([]*model.Message, 0, len(before)+limit)
 	for i := len(before) - 1; i >= 0; i-- {
 		out = append(out, before[i])
 	}
-	out = append(out, after...)
-	return out, nil
+	if beforeID > 0 {
+		return out, nil
+	}
+
+	var after []*model.Message
+	if err := r.contextQuery(ctx, msg, nearby).Where("id > ?", msg.ID).Order("id ASC").Limit(limit).Find(&after).Error; err != nil {
+		return nil, err
+	}
+	return append(out, after...), nil
 }
 
 func (r *messageRepository) ListUserRoomActivity(ctx context.Context, userID uint, limit int) ([]UserRoomActivity, error) {

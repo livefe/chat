@@ -2,37 +2,45 @@
   <section class="review-section handle-section">
     <div class="section-title">处理举报</div>
     <div class="preset-row">
-      <el-button size="small" @click="applyPreset('reject')">驳回</el-button>
-      <el-button size="small" @click="applyPreset('warn')">警告结案</el-button>
+      <el-button size="small" @click="applyPreset(ReportStatus.Rejected, ReportHandleAction.None)">
+        驳回
+      </el-button>
+      <el-button
+        v-if="report.targetUserId"
+        size="small"
+        @click="applyPreset(ReportStatus.Resolved, ReportHandleAction.Warn)"
+      >
+        警告结案
+      </el-button>
+      <el-button
+        v-if="report.targetUserId"
+        size="small"
+        type="warning"
+        @click="applyPreset(ReportStatus.Resolved, ReportHandleAction.Mute)"
+      >
+        禁言结案
+      </el-button>
+      <el-button
+        v-if="report.targetType === ReportTargetType.Message"
+        size="small"
+        type="danger"
+        @click="applyPreset(ReportStatus.Resolved, ReportHandleAction.DeleteContent)"
+      >
+        删除并结案
+      </el-button>
       <el-button
         v-if="report.targetType === ReportTargetType.Post"
         size="small"
         type="warning"
-        @click="applyPreset('disablePost')"
+        @click="applyPreset(ReportStatus.Resolved, ReportHandleAction.DisablePost)"
       >
         下架并结案
       </el-button>
       <el-button
         v-if="report.targetUserId"
         size="small"
-        type="warning"
-        @click="applyPreset('mute')"
-      >
-        禁言 24h 并结案
-      </el-button>
-      <el-button
-        v-if="report.targetType === ReportTargetType.Message"
-        size="small"
         type="danger"
-        @click="applyPreset('deleteMsg')"
-      >
-        删除并结案
-      </el-button>
-      <el-button
-        v-if="report.targetUserId"
-        size="small"
-        type="danger"
-        @click="applyPreset('disableUser')"
+        @click="applyPreset(ReportStatus.Resolved, ReportHandleAction.DisableUser)"
       >
         禁用账号并结案
       </el-button>
@@ -55,11 +63,10 @@
         </el-select>
       </el-form-item>
       <el-form-item
-        v-if="form.status === ReportStatus.Resolved && form.action === 3"
+        v-if="form.status === ReportStatus.Resolved && form.action === ReportHandleAction.Mute"
         label="禁言时长"
       >
-        <el-input-number v-model="form.muteHours" :min="1" :max="8760" />
-        <span class="inline-hint">小时</span>
+        <MuteDurationInput v-model="form.muteDuration" />
       </el-form-item>
       <el-form-item label="处理说明">
         <el-input
@@ -68,94 +75,122 @@
           :rows="3"
           maxlength="500"
           show-word-limit
-          placeholder="填写处理说明（选填）"
+          :placeholder="handleResultPlaceholder"
         />
       </el-form-item>
+      <el-form-item v-if="(report.targetReportCount ?? 0) > 1" label="同对象">
+        <el-checkbox v-model="form.resolveSameTarget">
+          其余 {{ (report.targetReportCount ?? 1) - 1 }} 条举报中待处理的按相同结果一并结案
+        </el-checkbox>
+      </el-form-item>
     </el-form>
-    <div class="handle-footer dialog-footer">
-      <el-button @click="emit('cancel')">关闭</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">提交处理</el-button>
+    <div class="handle-footer">
+      <el-checkbox v-model="openNext">处理后打开下一条待处理</el-checkbox>
+      <div class="dialog-footer">
+        <el-button @click="emit('cancel')">关闭</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">提交处理</el-button>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
 import { handleReport, type ReportItem } from '@/api/report'
-import { REPORT_HANDLE_ACTION_OPTIONS, ReportStatus, ReportTargetType } from '@/constants/report'
+import MuteDurationInput from '@/components/user/MuteDurationInput.vue'
+import {
+  REPORT_HANDLE_ACTION_OPTIONS,
+  ReportHandleAction,
+  ReportStatus,
+  ReportTargetType,
+} from '@/constants/report'
+import { muteDurationLabel } from '@/constants/user'
 import { showApiError } from '@/utils/apiError'
 
-type HandlePreset = 'reject' | 'warn' | 'mute' | 'disableUser' | 'deleteMsg' | 'disablePost'
+const OPEN_NEXT_KEY = 'report:openNext'
 
 const props = defineProps<{ report: ReportItem }>()
-const emit = defineEmits<{ handled: []; cancel: [] }>()
+const emit = defineEmits<{ handled: [openNext: boolean]; cancel: [] }>()
 
 const saving = ref(false)
+const openNext = ref(localStorage.getItem(OPEN_NEXT_KEY) !== '0')
 const form = reactive({
   status: ReportStatus.Resolved as number,
+  action: ReportHandleAction.None as number,
+  muteDuration: 24,
   handleResult: '',
-  action: 0,
-  muteHours: 24,
+  resolveSameTarget: false,
 })
 
-const allowedActions = computed(() => {
-  const targetType = props.report.targetType
-  return REPORT_HANDLE_ACTION_OPTIONS.filter((opt) => {
-    if (opt.value === 2) return targetType === ReportTargetType.Message
-    if (opt.value === 5) return targetType === ReportTargetType.Post
-    if (opt.value === 3 || opt.value === 4) return true
-    return opt.value <= 1
-  })
-})
+const allowedActions = computed(() =>
+  REPORT_HANDLE_ACTION_OPTIONS.filter((opt) => {
+    switch (opt.value) {
+      case ReportHandleAction.DeleteContent:
+        return props.report.targetType === ReportTargetType.Message
+      case ReportHandleAction.DisablePost:
+        return props.report.targetType === ReportTargetType.Post
+      case ReportHandleAction.Warn:
+      case ReportHandleAction.Mute:
+      case ReportHandleAction.DisableUser:
+        return props.report.targetUserId > 0
+      default:
+        return true
+    }
+  }),
+)
 
-function applyPreset(preset: HandlePreset) {
-  switch (preset) {
-    case 'reject':
-      form.status = ReportStatus.Rejected
-      form.action = 0
-      break
-    case 'warn':
-      form.status = ReportStatus.Resolved
-      form.action = 1
-      form.handleResult = form.handleResult || '已警告被举报用户'
-      break
-    case 'mute':
-      form.status = ReportStatus.Resolved
-      form.action = 3
-      form.muteHours = 24
-      form.handleResult = form.handleResult || '禁言 24 小时'
-      break
-    case 'disableUser':
-      form.status = ReportStatus.Resolved
-      form.action = 4
-      form.handleResult = form.handleResult || '禁用账号'
-      break
-    case 'deleteMsg':
-      form.status = ReportStatus.Resolved
-      form.action = 2
-      form.handleResult = form.handleResult || '删除违规消息'
-      break
-    case 'disablePost':
-      form.status = ReportStatus.Resolved
-      form.action = 5
-      form.handleResult = form.handleResult || '下架违规内容'
-      break
-  }
+const handleResultPlaceholder = computed(() =>
+  form.action === ReportHandleAction.Warn
+    ? '警告原因会以站内消息发送给用户；留空时按举报原因生成'
+    : '选填；会记入被举报用户的处罚记录',
+)
+
+const actionLabel = (action: number) =>
+  REPORT_HANDLE_ACTION_OPTIONS.find((o) => o.value === action)?.label ?? ''
+
+function applyPreset(status: number, action: number) {
+  form.status = status
+  form.action = action
+  if (action === ReportHandleAction.Mute) form.muteDuration = 24
 }
 
 async function submit() {
+  const resolved = form.status === ReportStatus.Resolved
+  const action = resolved ? form.action : ReportHandleAction.None
+  const parts = [resolved ? '确认处理该举报' : '确认驳回该举报']
+  if (action === ReportHandleAction.Mute) {
+    parts.push(`禁言被举报用户 ${muteDurationLabel(form.muteDuration)}`)
+  } else if (action !== ReportHandleAction.None) {
+    parts.push(actionLabel(action))
+  }
+  if (form.resolveSameTarget) parts.push('同对象的其它待处理举报一并结案')
+  try {
+    await ElMessageBox.confirm(`${parts.join('，')}？`, '提交处理', {
+      type: action === ReportHandleAction.None ? 'info' : 'warning',
+    })
+  } catch {
+    return
+  }
+
   saving.value = true
   try {
-    await handleReport({
+    const { data } = await handleReport({
       id: props.report.id,
       status: form.status,
-      handleResult: form.handleResult,
-      action: form.status === ReportStatus.Resolved ? form.action : 0,
-      muteHours: form.muteHours,
+      handleResult: form.handleResult.trim(),
+      action,
+      muteDuration: action === ReportHandleAction.Mute ? form.muteDuration : 0,
+      resolveSameTarget: form.resolveSameTarget,
     })
-    ElMessage.success('处理成功')
-    emit('handled')
+    ElMessage.success(
+      data.resolvedCount > 0
+        ? `处理成功，另有 ${data.resolvedCount} 条同对象举报已结案`
+        : '处理成功',
+    )
+    localStorage.setItem(OPEN_NEXT_KEY, openNext.value ? '1' : '0')
+    emit('handled', openNext.value)
   } catch (e) {
     showApiError(e, '处理失败')
   } finally {
@@ -169,23 +204,27 @@ async function submit() {
   padding-top: 16px;
   border-top: 1px solid var(--el-border-color-lighter);
 }
+
 .preset-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
 }
+
+.preset-row .el-button + .el-button {
+  margin-left: 0;
+}
+
 .handle-form {
   margin-top: 4px;
 }
+
 .handle-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-top: 8px;
-}
-.inline-hint {
-  margin-left: 8px;
-  color: var(--el-text-color-secondary);
 }
 </style>

@@ -4,13 +4,27 @@
     :data="data"
     v-loading="loading"
     row-key="id"
-    empty-text="暂无部门"
     :default-expand-all="expandAll"
     :tree-props="{ children: 'children' }"
     @row-click="(row: DepartmentItem) => emit('detail', row)"
   >
+    <template #empty>
+      <TableEmpty :error="error" text="暂无部门" @retry="emit('retry')" />
+    </template>
     <el-table-column prop="name" label="部门名称" min-width="220" />
-    <el-table-column prop="employeeCount" label="员工数" width="90" align="center" />
+    <el-table-column label="员工数" width="120" align="center">
+      <template #header>
+        <el-tooltip content="直属员工 / 含下级部门合计" placement="top">
+          <span>员工数</span>
+        </el-tooltip>
+      </template>
+      <template #default="{ row }">
+        {{ row.employeeCount }}
+        <span v-if="row.totalEmployeeCount !== row.employeeCount" class="sub">
+          / {{ row.totalEmployeeCount }}
+        </span>
+      </template>
+    </el-table-column>
     <el-table-column prop="sort" label="排序" width="80" />
     <el-table-column label="状态" width="100">
       <template #default="{ row }">
@@ -65,17 +79,20 @@
 
 <script setup lang="ts">
 import type { DepartmentItem } from '@/api/department'
+import TableEmpty from '@/components/common/TableEmpty.vue'
 import { usePermission } from '@/composables/usePermission'
 import { PERM } from '@/constants/permission'
 
 defineProps<{
   data: DepartmentItem[]
   loading: boolean
+  error?: boolean
   expandAll: boolean
   tableKey: string
 }>()
 
 const emit = defineEmits<{
+  retry: []
   detail: [row: DepartmentItem]
   'add-child': [row: DepartmentItem]
   edit: [row: DepartmentItem]

@@ -1,9 +1,9 @@
 <template>
-  <el-form :inline="true" class="search-form">
+  <el-form :inline="true" class="search-form" @submit.prevent>
     <el-form-item label="关键词">
       <el-input
         v-model="keyword"
-        placeholder="名称/简称"
+        placeholder="名称/简称/区划码"
         clearable
         style="width: 200px"
         @keyup.enter="emit('search')"

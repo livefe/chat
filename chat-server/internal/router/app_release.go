@@ -19,6 +19,7 @@ func registerAppReleaseRoutes(engine *gin.Engine, h *container.Handlers) {
 		admin.POST("/publish-meta", ah.AdminPublishMeta)
 		admin.POST("/set-current", ah.AdminSetCurrent)
 		admin.POST("/unset-current", ah.AdminUnsetCurrent)
+		admin.POST("/delete", ah.AdminDelete)
 		admin.GET("/policy/list", ah.AdminPolicyList)
 		admin.POST("/policy/save", ah.AdminPolicySave)
 	}

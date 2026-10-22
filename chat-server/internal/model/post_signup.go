@@ -12,7 +12,7 @@ const (
 type PostSignup struct {
 	Base
 	PostID       uint   `gorm:"type:int unsigned;not null;uniqueIndex:idx_post_user,priority:1;comment:帖子ID" json:"postId"`
-	UserID       uint   `gorm:"type:int unsigned;not null;uniqueIndex:idx_post_user,priority:2;comment:用户ID" json:"userId"`
+	UserID       uint   `gorm:"type:int unsigned;not null;uniqueIndex:idx_post_user,priority:2;index:idx_signup_user;comment:用户ID" json:"userId"`
 	Status       uint8  `gorm:"type:tinyint unsigned;not null;default:1;index;comment:状态(1已报名 2候补 3已取消)" json:"status"`
 	CancelledAt  int64  `gorm:"type:bigint;not null;default:0;comment:取消时间(秒)" json:"cancelledAt"`
 	CheckInToken string `gorm:"type:varchar(40);not null;default:'';index;comment:核验凭证(已报名时生成)" json:"checkInToken"`
