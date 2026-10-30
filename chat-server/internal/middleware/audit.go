@@ -15,7 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 高频聊天类接口不记录操作审计，格式为 "METHOD 路由"。
 var auditExcludedRoutes = []string{
 	"POST /api/admin/im/conversations/dm",
 	"POST /api/admin/im/messages",

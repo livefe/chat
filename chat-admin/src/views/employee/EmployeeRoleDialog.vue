@@ -95,7 +95,6 @@ function isSuperRole(role: EmployeeRoleBrief) {
   return role.code === SUPER_ADMIN_ROLE_CODE
 }
 
-/** 禁用角色只能取消、不能新勾选；超管角色只有超管能动。 */
 function isOptionDisabled(role: EmployeeRoleBrief) {
   if (role.status !== 1 && !checkedRoleIds.value.includes(role.id)) return true
   return isSuperRole(role) && !operatorIsSuper.value

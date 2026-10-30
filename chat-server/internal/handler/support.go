@@ -114,7 +114,7 @@ func (h *SupportHandler) AdminUpdateConfig(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	result, err := h.supportSvc.AdminUpdateConfig(c.Request.Context(), &req)
+	result, err := h.supportSvc.AdminUpdateConfig(c.Request.Context(), middleware.CurrentEmployeeID(c), &req)
 	if err != nil {
 		response.WriteError(c, err)
 		return

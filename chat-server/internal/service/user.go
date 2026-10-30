@@ -27,7 +27,6 @@ type userSessionNotifier interface {
 	RemoveOnlineGeo(ctx context.Context, userID uint)
 }
 
-// userNoticeSender 向用户发送站内系统通知（由客服会话承载）。
 type userNoticeSender interface {
 	NotifyUser(ctx context.Context, userID uint, text string) error
 }
@@ -37,7 +36,7 @@ type UserService struct {
 	db               *database.DB
 	authSvc          *AuthService
 	smsSvc           *SMSService
-	userRepo         *UserStore
+	userRepo         repository.UserRepository
 	loginRepo        repository.UserLoginRecordRepository
 	convDelRepo      repository.ConversationDeletionRepository
 	blockRepo        repository.UserBlockRepository
@@ -58,7 +57,7 @@ func NewUserService(
 	db *database.DB,
 	authSvc *AuthService,
 	smsSvc *SMSService,
-	userRepo *UserStore,
+	userRepo repository.UserRepository,
 	loginRepo repository.UserLoginRecordRepository,
 	convDelRepo repository.ConversationDeletionRepository,
 	blockRepo repository.UserBlockRepository,
@@ -93,7 +92,6 @@ func NewUserService(
 	}
 }
 
-// SetNoticeSender 客服服务依赖用户服务，只能在其构建后注入。
 func (s *UserService) SetNoticeSender(n userNoticeSender) {
 	s.notice = n
 }
@@ -161,7 +159,7 @@ func (s *UserService) EnsureActive(ctx context.Context, userID uint) error {
 	if userID == 0 {
 		return errs.NotFound("用户不存在")
 	}
-	user, err := s.userRepo.GetByIDWithCache(ctx, userID)
+	user, err := s.userRepo.GetCached(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errs.NotFound("用户不存在")
@@ -178,7 +176,7 @@ func (s *UserService) AssertAuthenticatedUser(ctx context.Context, userID uint) 
 	if userID == 0 {
 		return errs.Unauthorized("用户ID无效")
 	}
-	user, err := s.userRepo.GetByIDWithCache(ctx, userID)
+	user, err := s.userRepo.GetCached(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errs.Unauthorized("用户不存在")

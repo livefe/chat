@@ -113,7 +113,6 @@ function showSameTarget(row: ReportItem) {
   void handleSearch()
 }
 
-/** 处理完成后刷新列表；需要时按当前筛选条件打开下一条待处理（最早提交的一条）。 */
 async function onHandled(openNext: boolean) {
   await fetchList()
   if (!openNext) return
@@ -126,12 +125,9 @@ async function onHandled(openNext: boolean) {
     })
     const next = data.list[0]
     if (next) openReview(next.id)
-  } catch {
-    // 打开下一条失败不影响本次处理结果
-  }
+  } catch {}
 }
 
-/** ?reviewId=<举报ID> 打开审核抽屉，打开后从地址栏移除。 */
 function openReviewFromRoute() {
   const raw = route.query.reviewId
   const id = Number(Array.isArray(raw) ? raw[0] : raw)

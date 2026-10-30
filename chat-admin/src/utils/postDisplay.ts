@@ -25,7 +25,6 @@ export function statusLabel(status: number) {
   return POST_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? String(status)
 }
 
-/** 后台可执行的状态流转，与服务端 postStatusTransitionAllowed 保持一致。 */
 export function canChangePostStatus(row: Pick<PostItem, 'status' | 'deleted'>, to: PostStatus) {
   if (row.deleted) return false
   switch (to) {
@@ -134,12 +133,10 @@ export function signupCheckInTag(row: {
 
 function csvCell(value: string | number | undefined | null): string {
   let text = value === undefined || value === null ? '' : String(value)
-  // 防止昵称等用户输入在 Excel 中被当作公式执行
   if (/^[=+\-@]/.test(text)) text = `'${text}`
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
-/** 生成带 UTF-8 BOM 的 CSV 并触发下载，Excel 可直接正确显示中文。 */
 export function downloadCsv(filename: string, header: string[], rows: (string | number)[][]) {
   const content = [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n')
   const blob = new Blob(['\uFEFF', content], { type: 'text/csv;charset=utf-8' })

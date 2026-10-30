@@ -27,7 +27,6 @@ export function pushMenuRoute(
   router.push({ path, query })
 }
 
-/** 只接受站内路径作为登录后的回跳地址。 */
 export function safeRedirect(
   raw: LocationQueryValue | LocationQueryValue[] | undefined,
 ): string | undefined {

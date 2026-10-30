@@ -203,7 +203,6 @@ func (s *PermissionService) ensureCodeAvailable(ctx context.Context, permType ui
 	return nil
 }
 
-// AdminTree 管理页返回全部权限（含禁用）；assignableOnly 时只返回可分配的启用菜单与按钮。
 func (s *PermissionService) AdminTree(ctx context.Context, assignableOnly bool) ([]*types.PermissionTreeItem, error) {
 	perms, err := s.permissionRepo.ListAll(ctx)
 	if err != nil {

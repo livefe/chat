@@ -46,7 +46,6 @@ function rematchCurrent(to: RouteLocationNormalized) {
   }
 }
 
-/** 跳到登录页并记住当前地址，登录后回到这里。 */
 export function loginLocation(fullPath?: string) {
   const redirect = safeRedirect(fullPath)
   return {
@@ -98,9 +97,7 @@ router.beforeEach(async (to) => {
       await employee.loadPermissions()
       syncDynamicRoutes(router, employee.permissions)
       if (employee.hasPermission(permission)) return true
-    } catch {
-      // 刷新失败按无权限处理
-    }
+    } catch {}
     return {
       path: '/403',
       query: {

@@ -44,14 +44,14 @@ func (s *ChatHub) PostOnlineCount(ctx context.Context, postID uint) (int, error)
 
 func (s *ChatHub) refreshRoomPresenceForConn(ctx context.Context, c *websocket.Conn) {
 	userID := connUserID(c)
-	for rid := range connRooms(c) {
+	for _, rid := range connRooms(c) {
 		s.touchRoomPresence(ctx, rid, userID)
 	}
 }
 
 func (s *ChatHub) refreshPostPresenceForConn(ctx context.Context, c *websocket.Conn) {
 	userID := connUserID(c)
-	for pid := range connPosts(c) {
+	for _, pid := range connPosts(c) {
 		s.touchPostPresence(ctx, pid, userID)
 	}
 }

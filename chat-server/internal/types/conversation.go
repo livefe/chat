@@ -43,7 +43,6 @@ type DeleteConversationResponse struct {
 	ClearedBeforeID uint `json:"clearedBeforeId"`
 }
 
-// AdminConversationListRequest 同时指定 UserID 与 PeerUserID 时精确匹配这一对用户；时间范围作用于最后活跃时间。
 type AdminConversationListRequest struct {
 	UserID     uint   `form:"userId"`
 	PeerUserID uint   `form:"peerUserId"`

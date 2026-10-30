@@ -23,16 +23,19 @@ func (s *RealtimeService) onSubscribe(c *websocket.Conn, msg *types.ClientMsg) {
 			s.replySubscribeError(c, types.ScopeRoom, msg.RoomID, 0, clientErrorText(ctx, s.log, err, "订阅失败"))
 			return
 		}
-		wasIn := roomTracked(c, msg.RoomID)
 		otherHad := s.userTracksRoom(userID, msg.RoomID, c)
-		s.hub.Subscribe(c, "room:"+strconv.FormatUint(uint64(msg.RoomID), 10))
-		trackRoom(c, msg.RoomID)
-		if !wasIn {
+		if !s.hub.Subscribe(c, roomTopic(msg.RoomID)) {
+			return
+		}
+		if trackRoom(c, msg.RoomID) {
 			if !otherHad {
 				s.setRoomPresence(ctx, msg.RoomID, userID, true)
 			} else {
 				s.touchRoomPresence(ctx, msg.RoomID, userID)
 			}
+		}
+		if !s.hub.Registered(c) {
+			s.abortRoomSubscribe(ctx, c, userID, msg.RoomID)
 		}
 	case types.ScopePost:
 		if msg.PostID == 0 {
@@ -45,16 +48,19 @@ func (s *RealtimeService) onSubscribe(c *websocket.Conn, msg *types.ClientMsg) {
 			s.replySubscribeError(c, types.ScopePost, 0, msg.PostID, clientErrorText(ctx, s.log, err, "订阅失败"))
 			return
 		}
-		wasIn := postTracked(c, msg.PostID)
 		otherHad := s.userTracksPost(userID, msg.PostID, c)
-		s.hub.Subscribe(c, "post:"+strconv.FormatUint(uint64(msg.PostID), 10))
-		trackPost(c, msg.PostID)
-		if !wasIn {
+		if !s.hub.Subscribe(c, postTopic(msg.PostID)) {
+			return
+		}
+		if trackPost(c, msg.PostID) {
 			if !otherHad {
 				s.setPostPresence(ctx, msg.PostID, userID, true)
 			} else {
 				s.touchPostPresence(ctx, msg.PostID, userID)
 			}
+		}
+		if !s.hub.Registered(c) {
+			s.abortPostSubscribe(ctx, c, userID, msg.PostID)
 		}
 	case types.ScopeNearby, types.ScopePrivate:
 
@@ -81,11 +87,21 @@ func (s *ChatHub) onUnsubscribe(c *websocket.Conn, msg *types.ClientMsg) {
 	}
 }
 
+func roomTopic(roomID uint) string { return "room:" + strconv.FormatUint(uint64(roomID), 10) }
+
+func postTopic(postID uint) string { return "post:" + strconv.FormatUint(uint64(postID), 10) }
+
 func (s *ChatHub) leaveRoomOnConn(ctx context.Context, c *websocket.Conn, userID, roomID uint) {
-	wasInRoom := roomTracked(c, roomID)
-	s.hub.Unsubscribe(c, "room:"+strconv.FormatUint(uint64(roomID), 10))
+	s.hub.Unsubscribe(c, roomTopic(roomID))
+	if untrackRoom(c, roomID) && !s.userTracksRoom(userID, roomID, nil) {
+		s.setRoomPresence(ctx, roomID, userID, false)
+	}
+}
+
+func (s *ChatHub) abortRoomSubscribe(ctx context.Context, c *websocket.Conn, userID, roomID uint) {
+	s.hub.Unsubscribe(c, roomTopic(roomID))
 	untrackRoom(c, roomID)
-	if wasInRoom && !s.userTracksRoom(userID, roomID, nil) {
+	if !s.userTracksRoom(userID, roomID, nil) {
 		s.setRoomPresence(ctx, roomID, userID, false)
 	}
 }
@@ -106,10 +122,16 @@ func (s *ChatHub) userTracksRoom(userID, roomID uint, exclude *websocket.Conn) b
 }
 
 func (s *ChatHub) leavePostOnConn(ctx context.Context, c *websocket.Conn, userID, postID uint) {
-	wasInPost := postTracked(c, postID)
-	s.hub.Unsubscribe(c, "post:"+strconv.FormatUint(uint64(postID), 10))
+	s.hub.Unsubscribe(c, postTopic(postID))
+	if untrackPost(c, postID) && !s.userTracksPost(userID, postID, nil) {
+		s.setPostPresence(ctx, postID, userID, false)
+	}
+}
+
+func (s *ChatHub) abortPostSubscribe(ctx context.Context, c *websocket.Conn, userID, postID uint) {
+	s.hub.Unsubscribe(c, postTopic(postID))
 	untrackPost(c, postID)
-	if wasInPost && !s.userTracksPost(userID, postID, nil) {
+	if !s.userTracksPost(userID, postID, nil) {
 		s.setPostPresence(ctx, postID, userID, false)
 	}
 }
@@ -142,11 +164,7 @@ func (s *RealtimeService) onLocation(ctx context.Context, c *websocket.Conn, msg
 	}
 	_ = s.presence.MarkOnline(ctx, userID)
 
-	subscribed := connRooms(c)
-	roomIDs := make([]uint, 0, len(subscribed))
-	for rid := range subscribed {
-		roomIDs = append(roomIDs, rid)
-	}
+	roomIDs := connRooms(c)
 	denied, err := s.roomSvc.CheckAccessBatch(ctx, roomIDs, msg.Lat, msg.Lng)
 	if err != nil {
 		s.log.Warn(ctx, "位置更新校验聊天区失败", logger.Uint("user_id", userID), logger.Error(err))

@@ -43,7 +43,6 @@ export interface UpdatePermissionRequest extends CreatePermissionRequest {
   id: number
 }
 
-/** assignable 为 true 时只返回可分配给角色的启用菜单与按钮；否则返回全部（含禁用）。 */
 export const getPermissionTree = (params?: { assignable?: boolean }) =>
   request.get<PermissionTreeItem[]>(
     '/api/admin/permission/tree',

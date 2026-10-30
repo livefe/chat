@@ -40,7 +40,6 @@ func NewDepartmentService(
 	}
 }
 
-// List 返回完整部门树，筛选由前端在树上完成。
 func (s *DepartmentService) List(ctx context.Context) (*types.DepartmentTreeResponse, error) {
 	all, err := s.deptRepo.List(ctx, repository.DepartmentListFilter{})
 	if err != nil {

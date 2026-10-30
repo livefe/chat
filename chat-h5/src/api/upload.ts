@@ -5,7 +5,6 @@ import service, { type ApiResponse } from './request'
 export interface UploadMediaResult {
   id: number
   url: string
-  key: string
   kind: string
   mimeType: string
   sizeBytes: number

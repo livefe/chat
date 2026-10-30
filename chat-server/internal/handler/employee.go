@@ -73,7 +73,7 @@ func (h *EmployeeHandler) Update(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.employeeSvc.AdminUpdate(c.Request.Context(), &req); err != nil {
+	if err := h.employeeSvc.AdminUpdate(c.Request.Context(), middleware.CurrentEmployeeID(c), &req); err != nil {
 		response.WriteError(c, err)
 		return
 	}

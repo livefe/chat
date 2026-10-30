@@ -230,7 +230,6 @@ function needsReason(status: PostStatus) {
   return status === PostStatus.Rejected || status === PostStatus.Disabled
 }
 
-/** 确认操作；驳回/下架必须填写原因（作者可见）。返回 null 表示取消。 */
 async function confirmStatusChange(
   status: PostStatus,
   action: string,

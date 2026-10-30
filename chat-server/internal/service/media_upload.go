@@ -26,47 +26,60 @@ var allowedImageMIMEs = map[string]string{
 	"image/webp": ".webp",
 }
 
-func (s *MediaService) UploadImage(ctx context.Context, userID uint, reader io.Reader, size int64) (*types.MediaResponse, error) {
-	return s.upload(ctx, userID, model.MediaKindImage, "image", reader, size,
-		int64(s.maxSizeMB)*1024*1024, s.maxSizeMB, "图片",
-		func(header []byte) (string, string, bool) {
-			mimeType := http.DetectContentType(header)
-			ext, ok := allowedImageMIMEs[mimeType]
-			return mimeType, ext, ok
-		},
-		"仅支持 jpg、png、gif、webp 格式图片",
-		"上传图片失败",
-	)
+type mediaUploadSpec struct {
+	kind      uint8
+	dir       string
+	label     string
+	sniff     func(header []byte) (mimeType, ext string, ok bool)
+	rejectMsg string
 }
 
-func (s *MediaService) UploadVideo(ctx context.Context, userID uint, reader io.Reader, size int64) (*types.MediaResponse, error) {
-	return s.upload(ctx, userID, model.MediaKindVideo, "video", reader, size,
-		int64(s.maxVideoSizeMB)*1024*1024, s.maxVideoSizeMB, "视频",
-		sniffVideoMIME,
-		"仅支持 mp4、mov、webm、3gp 格式视频",
-		"上传视频失败",
-	)
+func (s *MediaService) UploadImage(ctx context.Context, uploader MediaUploader, reader io.Reader, size int64) (*types.MediaResponse, error) {
+	return s.upload(ctx, uploader, reader, size, mediaUploadSpec{
+		kind:      model.MediaKindImage,
+		dir:       "image",
+		label:     "图片",
+		sniff:     sniffImageMIME,
+		rejectMsg: "仅支持 jpg、png、gif、webp 格式图片",
+	})
 }
 
-func (s *MediaService) UploadAudio(ctx context.Context, userID uint, reader io.Reader, size int64) (*types.MediaResponse, error) {
-	return s.upload(ctx, userID, model.MediaKindAudio, "audio", reader, size,
-		int64(s.maxAudioSizeMB)*1024*1024, s.maxAudioSizeMB, "语音",
-		sniffAudioMIME,
-		"仅支持 m4a、mp3、webm、ogg、wav 格式语音",
-		"上传语音失败",
-	)
+func (s *MediaService) UploadVideo(ctx context.Context, uploader MediaUploader, reader io.Reader, size int64) (*types.MediaResponse, error) {
+	return s.upload(ctx, uploader, reader, size, mediaUploadSpec{
+		kind:      model.MediaKindVideo,
+		dir:       "video",
+		label:     "视频",
+		sniff:     sniffVideoMIME,
+		rejectMsg: "仅支持 mp4、mov、webm、3gp 格式视频",
+	})
 }
 
-func (s *MediaService) UploadFile(ctx context.Context, userID uint, reader io.Reader, size int64, filename string) (*types.MediaResponse, error) {
-	const maxFileMB = 20
-	return s.upload(ctx, userID, model.MediaKindFile, "file", reader, size,
-		int64(maxFileMB)*1024*1024, maxFileMB, "文件",
-		func(header []byte) (string, string, bool) {
+func (s *MediaService) UploadAudio(ctx context.Context, uploader MediaUploader, reader io.Reader, size int64) (*types.MediaResponse, error) {
+	return s.upload(ctx, uploader, reader, size, mediaUploadSpec{
+		kind:      model.MediaKindAudio,
+		dir:       "audio",
+		label:     "语音",
+		sniff:     sniffAudioMIME,
+		rejectMsg: "仅支持 m4a、mp3、webm、ogg、wav 格式语音",
+	})
+}
+
+func (s *MediaService) UploadFile(ctx context.Context, uploader MediaUploader, reader io.Reader, size int64, filename string) (*types.MediaResponse, error) {
+	return s.upload(ctx, uploader, reader, size, mediaUploadSpec{
+		kind:  model.MediaKindFile,
+		dir:   "file",
+		label: "文件",
+		sniff: func(header []byte) (string, string, bool) {
 			return sniffFileMIME(header, filename)
 		},
-		"仅支持 pdf、doc、docx、xls、xlsx、ppt、pptx、txt、csv、zip、rar、7z 格式文件",
-		"上传文件失败",
-	)
+		rejectMsg: "仅支持 pdf、doc、docx、xls、xlsx、ppt、pptx、txt、csv、zip、rar、7z 格式文件",
+	})
+}
+
+func sniffImageMIME(header []byte) (mimeType, ext string, ok bool) {
+	mimeType = http.DetectContentType(header)
+	ext, ok = allowedImageMIMEs[mimeType]
+	return mimeType, ext, ok
 }
 
 func sniffFileMIME(header []byte, filename string) (mimeType, ext string, ok bool) {
@@ -159,25 +172,15 @@ func sniffAudioMIME(header []byte) (mimeType, ext string, ok bool) {
 
 const sniffLen = 512
 
-func (s *MediaService) upload(
-	ctx context.Context,
-	userID uint,
-	kind uint8,
-	kindDir string,
-	reader io.Reader,
-	size int64,
-	maxBytes int64,
-	maxMB int,
-	label string,
-	sniff func([]byte) (string, string, bool),
-	rejectMsg string,
-	logMsg string,
-) (*types.MediaResponse, error) {
-	if size > maxBytes {
-		return nil, errs.Invalid(fmt.Sprintf("%s大小不能超过 %dMB", label, maxMB))
-	}
+func (s *MediaService) upload(ctx context.Context, uploader MediaUploader, reader io.Reader, size int64, spec mediaUploadSpec) (*types.MediaResponse, error) {
+	limitMB := s.limitMB[spec.kind]
+	maxBytes := s.MaxUploadBytes(spec.kind)
+	tooLarge := errs.Invalid(fmt.Sprintf("%s大小不能超过 %dMB", spec.label, limitMB))
 	if size <= 0 {
 		return nil, errs.Invalid("文件不能为空")
+	}
+	if size > maxBytes {
+		return nil, tooLarge
 	}
 
 	header := make([]byte, sniffLen)
@@ -190,48 +193,64 @@ func (s *MediaService) upload(
 		return nil, errs.Invalid("文件不能为空")
 	}
 
-	mimeType, ext, ok := sniff(header)
+	mimeType, ext, ok := spec.sniff(header)
 	if !ok {
-		return nil, errs.Invalid(rejectMsg)
+		return nil, errs.Invalid(spec.rejectMsg)
+	}
+
+	asset := &model.MediaAsset{
+		UploaderKind: uploader.Kind,
+		UploaderID:   uploader.ID,
+		Kind:         spec.kind,
+		ObjectKey:    s.objectKey(uploader, spec.dir, ext),
+		MimeType:     mimeType,
+		Ext:          ext,
+		Status:       model.MediaStatusPending,
+	}
+	if err := s.assetRepo.Create(ctx, asset); err != nil {
+		s.log.Error(ctx, "登记媒体失败", logger.Error(err))
+		return nil, fmt.Errorf("上传失败，请稍后重试: %w", err)
 	}
 
 	counter := &countingReader{r: io.MultiReader(bytes.NewReader(header), reader)}
 	body := &limitedReader{r: counter, remaining: maxBytes}
-	objectKey := path.Join(s.pathPrefix, kindDir, time.Now().Format("2006/01/02"), fmt.Sprintf("%d", userID), uuid.NewString()+ext)
-
-	url, err := s.client.Upload(objectKey, body, mimeType)
-	if err != nil {
+	if err := s.client.Put(ctx, asset.ObjectKey, body, size, mimeType); err != nil {
+		s.discard(ctx, asset.ID)
 		if errors.Is(err, errReaderTooLarge) {
-			return nil, errs.Invalid(fmt.Sprintf("%s大小不能超过 %dMB", label, maxMB))
+			return nil, tooLarge
 		}
-		s.log.Error(ctx, logMsg, logger.Error(err))
+		s.log.Error(ctx, "上传"+spec.label+"失败", logger.Error(err))
 		return nil, fmt.Errorf("上传失败，请稍后重试: %w", err)
 	}
-
-	asset := &model.MediaAsset{
-		UserID:    userID,
-		Kind:      kind,
-		ObjectKey: objectKey,
-		URL:       url,
-		MimeType:  mimeType,
-		Ext:       ext,
-		SizeBytes: counter.n,
-		Status:    model.MediaStatusUploaded,
-	}
-	if err := s.assetRepo.Create(ctx, asset); err != nil {
-		_ = s.client.Delete(ctx, objectKey)
-		s.log.Error(ctx, "保存媒体记录失败", logger.Error(err))
+	marked, err := s.assetRepo.MarkUploaded(ctx, asset.ID, counter.n)
+	if err != nil || !marked {
+		s.discard(ctx, asset.ID)
+		s.log.Error(ctx, "确认媒体上传失败", logger.Uint("mediaId", asset.ID), logger.Error(err))
 		return nil, fmt.Errorf("上传失败，请稍后重试: %w", err)
 	}
 
 	return &types.MediaResponse{
 		ID:        asset.ID,
-		URL:       asset.URL,
-		Key:       asset.ObjectKey,
-		Kind:      kindDir,
-		MimeType:  asset.MimeType,
-		SizeBytes: asset.SizeBytes,
+		URL:       s.client.URL(asset.ObjectKey),
+		Kind:      spec.dir,
+		MimeType:  mimeType,
+		SizeBytes: counter.n,
 	}, nil
+}
+
+func (s *MediaService) objectKey(uploader MediaUploader, dir, ext string) string {
+	owner := fmt.Sprintf("u%d", uploader.ID)
+	if uploader.Kind == model.MediaUploaderEmployee {
+		owner = fmt.Sprintf("e%d", uploader.ID)
+	}
+	return path.Join(s.pathPrefix, dir, time.Now().Format("2006/01/02"), owner, uuid.NewString()+ext)
+}
+
+func (s *MediaService) discard(ctx context.Context, mediaID uint) {
+	ctx = context.WithoutCancel(ctx)
+	if err := s.assetRepo.Discard(ctx, mediaID); err != nil {
+		s.log.Error(ctx, "放弃上传记录失败", logger.Uint("mediaId", mediaID), logger.Error(err))
+	}
 }
 
 type countingReader struct {
@@ -254,7 +273,12 @@ type limitedReader struct {
 
 func (l *limitedReader) Read(p []byte) (int, error) {
 	if l.remaining <= 0 {
-		return 0, errReaderTooLarge
+		var probe [1]byte
+		n, err := l.r.Read(probe[:])
+		if n > 0 {
+			return 0, errReaderTooLarge
+		}
+		return 0, err
 	}
 	if int64(len(p)) > l.remaining {
 		p = p[:l.remaining]

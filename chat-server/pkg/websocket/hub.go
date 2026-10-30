@@ -78,10 +78,20 @@ func (h *Hub[ID]) Unregister(c *Conn) {
 	delete(h.connTopics, c)
 }
 
-func (h *Hub[ID]) Subscribe(c *Conn, topic string) {
+func (h *Hub[ID]) Registered(c *Conn) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.byConn[c]
+	return ok
+}
+
+func (h *Hub[ID]) Subscribe(c *Conn, topic string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if _, ok := h.byConn[c]; !ok {
+		return false
+	}
 	set, ok := h.topics[topic]
 	if !ok {
 		set = make(map[*Conn]struct{}, 4)
@@ -94,6 +104,7 @@ func (h *Hub[ID]) Subscribe(c *Conn, topic string) {
 		h.connTopics[c] = ct
 	}
 	ct[topic] = struct{}{}
+	return true
 }
 
 func (h *Hub[ID]) Unsubscribe(c *Conn, topic string) {

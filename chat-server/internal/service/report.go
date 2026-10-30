@@ -172,7 +172,7 @@ func (s *ReportService) Submit(ctx context.Context, reporterID uint, req *types.
 		return fmt.Errorf("提交失败，请稍后重试: %w", err)
 	}
 	if len(images) > 0 && s.mediaSvc != nil {
-		if _, err := s.mediaSvc.BindMany(ctx, reporterID, images, model.MediaKindImage, model.MediaBizReport, item.ID); err != nil {
+		if err := s.mediaSvc.BindMany(ctx, UserUploader(reporterID), images, model.MediaKindImage, model.MediaBizReport, item.ID); err != nil {
 			return err
 		}
 	}

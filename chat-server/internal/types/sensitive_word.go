@@ -60,7 +60,6 @@ type ImportSensitiveWordsRequest struct {
 	Category string `json:"category" binding:"required,max=32"`
 }
 
-// 跳过的词按原因分组返回，便于管理员核对。
 type ImportSensitiveWordsResponse struct {
 	Created    int      `json:"created"`
 	Existing   []string `json:"existing"`

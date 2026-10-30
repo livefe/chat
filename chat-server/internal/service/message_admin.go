@@ -25,10 +25,8 @@ var messageScopeText = map[uint8]string{
 }
 
 const (
-	// adminKeywordDefaultWindow 仅按关键词搜索时默认的时间窗口，避免全表 LIKE。
 	adminKeywordDefaultWindow = 7 * 24 * time.Hour
-	// adminNearbyContextRadius 附近消息上下文的取样半径（米）。
-	adminNearbyContextRadius = 3000.0
+	adminNearbyContextRadius  = 3000.0
 )
 
 func (s *MessageService) AdminList(ctx context.Context, req *types.AdminMessageListRequest) (*types.AdminMessageListResponse, error) {
@@ -77,9 +75,8 @@ func (s *MessageService) AdminGetContext(ctx context.Context, req *types.AdminMe
 	return s.toAdminMessageItems(ctx, list)
 }
 
-// AdminDeleteMessages 批量删除并按需禁言发送者；已删除的消息计入跳过。
 func (s *MessageService) AdminDeleteMessages(ctx context.Context, employeeID uint, req *types.AdminMessageDeleteRequest) (*types.AdminMessageDeleteResult, error) {
-	ids := uniqueNonZeroIDs(req.IDs)
+	ids := uniqueUints(req.IDs)
 	msgs, err := s.msgRepo.GetByIDsUnscoped(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("查询消息失败: %w", err)
@@ -110,7 +107,6 @@ func (s *MessageService) AdminDeleteMessages(ctx context.Context, employeeID uin
 	return result, nil
 }
 
-// DeleteForReport 举报处置删除消息；消息已被删除时视为成功。
 func (s *MessageService) DeleteForReport(ctx context.Context, id uint, meta PunishMeta) error {
 	msg, err := s.msgRepo.GetByIDUnscoped(ctx, id)
 	if err != nil {

@@ -143,7 +143,7 @@
                   link
                   type="danger"
                   :disabled="saving"
-                  @click="profileForm.avatarUrl = ''"
+                  @click="clearAvatar"
                 >
                   清除
                 </el-button>
@@ -292,6 +292,7 @@ const profileForm = reactive({
   name: '',
   mobile: '',
   employeeNo: '',
+  avatarMediaId: 0,
   avatarUrl: '',
   department: '',
   status: 1,
@@ -301,6 +302,7 @@ function applyProfile(data: EmployeeInfo) {
   profileForm.name = data.name || ''
   profileForm.mobile = data.mobile || ''
   profileForm.employeeNo = data.employeeNo || ''
+  profileForm.avatarMediaId = data.avatarMediaId || 0
   profileForm.avatarUrl = data.avatarUrl || ''
   profileForm.department = data.department || ''
   profileForm.status = data.status
@@ -351,6 +353,7 @@ const onUploadAvatar: UploadRequestHandler = async (options) => {
   uploading.value = true
   try {
     const { data } = await uploadMyAvatar(options.file as File)
+    profileForm.avatarMediaId = data.id
     profileForm.avatarUrl = data.url || ''
     options.onSuccess?.(data)
   } catch (e) {
@@ -361,11 +364,16 @@ const onUploadAvatar: UploadRequestHandler = async (options) => {
   }
 }
 
+function clearAvatar() {
+  profileForm.avatarMediaId = 0
+  profileForm.avatarUrl = ''
+}
+
 async function saveProfile() {
   saving.value = true
   try {
     const { data } = await updateMyProfile({
-      avatarUrl: profileForm.avatarUrl,
+      avatarMediaId: profileForm.avatarMediaId,
     })
     applyProfile(data)
     employeeStore.setEmployeeInfo(data)

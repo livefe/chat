@@ -114,7 +114,6 @@ const strictOverride = ref(false)
 const effectiveStrict = computed(() => strictOverride.value || checkStrictly.value)
 const checkedIds = ref<number[]>([])
 
-/** 操作者自身拥有的权限；超出范围的节点不可勾选。 */
 const scopeIds = computed(() => new Set(employeeStore.permissions.map((p) => p.id)))
 
 function inScope(data: PermissionTreeItem) {

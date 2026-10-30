@@ -270,7 +270,7 @@ INSERT INTO `app_update_policy` (`platform`, `min_supported_version`, `title`, `
   ('ios', '1.0.0', '发现新版本', '请更新到最新版本以继续使用', NOW(), NOW()),
   ('h5', '1.0.0', '发现新版本', '请刷新页面以使用最新版本', NOW(), NOW());
 
-INSERT INTO `im_support_config` (`brand_name`, `brand_avatar_url`, `welcome_text`, `offline_text`, `enabled`, `quick_replies`, `created_at`, `updated_at`) VALUES
-  ('官方客服', '', '您好，请描述您的问题，我们会尽快回复', '当前客服繁忙或不在线，留言后我们会尽快回复', 1, '[]', NOW(), NOW());
+INSERT INTO `im_support_config` (`brand_name`, `welcome_text`, `offline_text`, `enabled`, `quick_replies`, `created_at`, `updated_at`) VALUES
+  ('官方客服', '您好，请描述您的问题，我们会尽快回复', '当前客服繁忙或不在线，留言后我们会尽快回复', 1, '[]', NOW(), NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;

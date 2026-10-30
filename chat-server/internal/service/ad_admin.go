@@ -151,9 +151,6 @@ func (s *AdService) toAdminItem(ctx context.Context, c *model.AdCampaign) types.
 	return it
 }
 
-// AdminSave 保存计划。投放中、待审核、已结束的计划不可编辑；
-// 已暂停或已驳回的计划保存后回到草稿（或直接提交审核），必须重新审核才能投放。
-// 上一次的驳回原因保留到审核通过为止，便于审核人对照修改。
 func (s *AdService) AdminSave(ctx context.Context, operatorID uint, req *types.AdminAdCampaignSaveRequest) (uint, error) {
 	if req.EndAt <= req.StartAt {
 		return 0, errs.Invalid("结束时间必须晚于开始时间")
@@ -226,10 +223,8 @@ func (s *AdService) AdminSave(ctx context.Context, operatorID uint, req *types.A
 		} else if err := s.campaignRepo.Update(ctx, item); err != nil {
 			return err
 		}
-		if s.mediaSvc != nil && item.ImageMediaID > 0 {
-			if _, err := s.mediaSvc.ReplaceBizMedia(ctx, operatorID, []uint{item.ImageMediaID}, model.MediaKindImage, model.MediaBizAdCampaign, item.ID); err != nil {
-				return err
-			}
+		if s.mediaSvc != nil {
+			return s.mediaSvc.ReplaceBizMedia(ctx, EmployeeUploader(operatorID), []uint{item.ImageMediaID}, model.MediaKindImage, model.MediaBizAdCampaign, item.ID)
 		}
 		return nil
 	}); err != nil {
@@ -243,7 +238,6 @@ func (s *AdService) AdminSave(ctx context.Context, operatorID uint, req *types.A
 	return item.ID, nil
 }
 
-// ensureActivatable 校验计划能否进入投放：未过期、落地有效、未超过商家同时投放上限。
 func (s *AdService) ensureActivatable(ctx context.Context, c *model.AdCampaign) error {
 	if c.EndAt < time.Now().Unix() {
 		return errs.Invalid("已过期，请先修改排期")
@@ -374,9 +368,7 @@ func (s *AdService) AdminCopy(ctx context.Context, operatorID, id uint) (uint, e
 			return err
 		}
 		if s.mediaSvc != nil && cp.ImageMediaID > 0 {
-			if _, err := s.mediaSvc.ReplaceBizMedia(ctx, operatorID, []uint{cp.ImageMediaID}, model.MediaKindImage, model.MediaBizAdCampaign, cp.ID); err != nil {
-				return err
-			}
+			return s.mediaSvc.BindShared(ctx, cp.ImageMediaID, model.MediaBizAdCampaign, cp.ID)
 		}
 		return nil
 	}); err != nil {

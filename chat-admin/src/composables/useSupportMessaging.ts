@@ -31,10 +31,8 @@ export function useSupportMessaging(
     canLoad?: (s: SupportAdminSession) => boolean
     canSend?: (s: SupportAdminSession) => boolean
     canUpload?: () => boolean
-    /** 只有当前坐席本人才需要标记已读 */
     canMarkRead?: (s: SupportAdminSession) => boolean
     onPreviewBumped?: () => void
-    /** 收到别人发来的消息（不含自己的回显） */
     onIncoming?: (item: SupportMessageItem) => void
     onQueueChanged?: () => void
   },
@@ -99,7 +97,6 @@ export function useSupportMessaging(
     return found
   }
 
-  /** 页面可见且是本人负责的会话时才上报已读，避免后台挂着页面把消息“读掉”。 */
   async function markActiveRead() {
     const conv = active.value
     if (!conv || !pageVisible.value) return
@@ -160,7 +157,6 @@ export function useSupportMessaging(
     }
   }
 
-  /** 拉取最新一页并合并新消息，用于断线兜底与总览旁听轮询。 */
   async function softRefreshMessages() {
     if (!loadable(active.value) || messagesLoading.value) return
     const convId = active.value.id

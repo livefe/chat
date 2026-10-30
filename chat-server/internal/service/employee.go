@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"app/internal/model"
 	"app/internal/repository"
@@ -25,6 +24,7 @@ type EmployeeService struct {
 	log              *logger.Logger
 	authSvc          *AuthService
 	permSvc          *PermissionService
+	mediaSvc         *MediaService
 	employeeRepo     repository.EmployeeRepository
 	employeeRoleRepo repository.EmployeeRoleRepository
 	loginRecordRepo  repository.EmployeeLoginRecordRepository
@@ -36,6 +36,7 @@ func NewEmployeeService(
 	log *logger.Logger,
 	authSvc *AuthService,
 	permSvc *PermissionService,
+	mediaSvc *MediaService,
 	employeeRepo repository.EmployeeRepository,
 	employeeRoleRepo repository.EmployeeRoleRepository,
 	loginRecordRepo repository.EmployeeLoginRecordRepository,
@@ -46,6 +47,7 @@ func NewEmployeeService(
 		log:              log,
 		authSvc:          authSvc,
 		permSvc:          permSvc,
+		mediaSvc:         mediaSvc,
 		employeeRepo:     employeeRepo,
 		employeeRoleRepo: employeeRoleRepo,
 		loginRecordRepo:  loginRecordRepo,
@@ -54,13 +56,36 @@ func NewEmployeeService(
 	}
 }
 
-func toEmployeeItem(e *model.Employee, roles []types.EmployeeRoleBrief, departmentName string, lastLogin *model.EmployeeLoginRecord) types.EmployeeItem {
+func employeeAvatarURLs(ctx context.Context, mediaSvc *MediaService, employees []*model.Employee) map[uint]string {
+	out := make(map[uint]string, len(employees))
+	if mediaSvc == nil {
+		return out
+	}
+	mediaIDs := make([]uint, 0, len(employees))
+	for _, e := range employees {
+		if e != nil && e.AvatarMediaID > 0 {
+			mediaIDs = append(mediaIDs, e.AvatarMediaID)
+		}
+	}
+	urls := mediaSvc.ResolveURLs(ctx, mediaIDs)
+	for _, e := range employees {
+		if e == nil {
+			continue
+		}
+		if u := urls[e.AvatarMediaID]; u != "" {
+			out[e.ID] = u
+		}
+	}
+	return out
+}
+
+func toEmployeeItem(e *model.Employee, roles []types.EmployeeRoleBrief, departmentName, avatarURL string, lastLogin *model.EmployeeLoginRecord) types.EmployeeItem {
 	item := types.EmployeeItem{
 		ID:           e.ID,
 		Mobile:       e.Mobile,
 		Name:         e.Name,
 		EmployeeNo:   e.EmployeeNo,
-		AvatarURL:    e.AvatarURL,
+		AvatarURL:    avatarURL,
 		DepartmentID: e.DepartmentID,
 		Department:   departmentName,
 		Roles:        roles,
@@ -94,17 +119,26 @@ func (s *EmployeeService) resolveDepartment(ctx context.Context, departmentID ui
 	return dept.ID, dept.Name, nil
 }
 
-func toEmployeeInfo(e *model.Employee, departmentName string) types.EmployeeInfo {
+func toEmployeeInfo(e *model.Employee, departmentName, avatarURL string) types.EmployeeInfo {
 	return types.EmployeeInfo{
-		ID:         e.ID,
-		Mobile:     utils.DesensitizeMobile(e.Mobile),
-		Name:       e.Name,
-		EmployeeNo: e.EmployeeNo,
-		AvatarURL:  e.AvatarURL,
-		Department: departmentName,
-		Status:     e.Status,
-		Remark:     e.Remark,
+		ID:            e.ID,
+		Mobile:        utils.DesensitizeMobile(e.Mobile),
+		Name:          e.Name,
+		EmployeeNo:    e.EmployeeNo,
+		AvatarMediaID: e.AvatarMediaID,
+		AvatarURL:     avatarURL,
+		Department:    departmentName,
+		Status:        e.Status,
+		Remark:        e.Remark,
 	}
+}
+
+func (s *EmployeeService) employeeInfo(ctx context.Context, e *model.Employee) types.EmployeeInfo {
+	departmentName := ""
+	if dept, err := s.deptRepo.GetByID(ctx, e.DepartmentID); err == nil {
+		departmentName = dept.Name
+	}
+	return toEmployeeInfo(e, departmentName, s.mediaSvc.ResolveURL(ctx, e.AvatarMediaID))
 }
 
 func (s *EmployeeService) EnsureActive(ctx context.Context, employeeID uint) error {
@@ -132,11 +166,7 @@ func (s *EmployeeService) Get(ctx context.Context, employeeID uint) (*types.Empl
 		}
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
-	departmentName := ""
-	if dept, err := s.deptRepo.GetByID(ctx, employee.DepartmentID); err == nil {
-		departmentName = dept.Name
-	}
-	info := toEmployeeInfo(employee, departmentName)
+	info := s.employeeInfo(ctx, employee)
 	return &info, nil
 }
 
@@ -152,16 +182,18 @@ func (s *EmployeeService) UpdateProfile(ctx context.Context, employeeID uint, re
 		return nil, errs.Forbidden("账号已被禁用")
 	}
 
-	employee.AvatarURL = strings.TrimSpace(req.AvatarURL)
-	if err := s.employeeRepo.Update(ctx, employee); err != nil {
-		s.log.Error(ctx, "更新个人资料失败", logger.Error(err))
-		return nil, fmt.Errorf("保存失败: %w", err)
+	oldID, newID := employee.AvatarMediaID, req.AvatarMediaID
+	employee.AvatarMediaID = newID
+	persist := func() error {
+		if err := s.employeeRepo.Update(ctx, employee); err != nil {
+			s.log.Error(ctx, "更新个人资料失败", logger.Error(err))
+			return fmt.Errorf("保存失败: %w", err)
+		}
+		return nil
 	}
-
-	departmentName := ""
-	if dept, err := s.deptRepo.GetByID(ctx, employee.DepartmentID); err == nil {
-		departmentName = dept.Name
+	if err := s.mediaSvc.ReplaceSingle(ctx, EmployeeUploader(employeeID), oldID, newID, model.MediaKindImage, model.MediaBizEmployeeAvatar, employeeID, persist); err != nil {
+		return nil, err
 	}
-	info := toEmployeeInfo(employee, departmentName)
+	info := s.employeeInfo(ctx, employee)
 	return &info, nil
 }

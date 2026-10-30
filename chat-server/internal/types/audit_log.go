@@ -52,7 +52,6 @@ type AuditOption struct {
 	Label string `json:"label"`
 }
 
-// 动作值为接口权限的完整编码，Module 用于按模块联动筛选。
 type AuditActionOption struct {
 	Value  string `json:"value"`
 	Label  string `json:"label"`

@@ -93,7 +93,6 @@ export function useStaffChat() {
     return msg
   }
 
-  /** 优先走 WebSocket（等待 ack，超时标记失败）；未连接时走 HTTP。clientMsgId 保证重发幂等。 */
   async function deliverText(conversationId: number, clientMsgId: string, text: string) {
     const payload = { conversationId, contentType: 1, content: text, clientMsgId }
     if (wsSend({ type: 'send', ...payload })) {
@@ -164,7 +163,6 @@ export function useStaffChat() {
     }
   }
 
-  /** 更新左侧会话条目；找不到时静默刷新列表（不出现加载遮罩）。 */
   function bumpSession(m: ImMessageItem, incoming: boolean) {
     const s = sessions.value.find((x) => x.id === m.conversationId)
     if (!s) {

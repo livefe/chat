@@ -5,7 +5,6 @@ import { useEmployeeStore } from '@/stores/employee'
 import { useUserDrawerStore } from '@/stores/userDrawer'
 import { pushMenuRoute } from '@/utils/navigation'
 
-/** 抽屉内跳转到其它菜单页：先关闭抽屉再导航。 */
 export function useDrawerNav() {
   const router = useRouter()
   const employeeStore = useEmployeeStore()

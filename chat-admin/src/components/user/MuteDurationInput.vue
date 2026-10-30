@@ -18,7 +18,6 @@ import { ref, watch } from 'vue'
 
 import { MUTE_MAX_HOURS, MUTE_PRESETS } from '@/constants/user'
 
-/** 0 在禁言语义里是「解除」，这里借用它表示自定义。 */
 const CUSTOM = 0
 
 const hours = defineModel<number>({ required: true })

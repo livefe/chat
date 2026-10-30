@@ -27,7 +27,6 @@ export function useSupportOverviewSummary() {
   return { summary, loadSummary }
 }
 
-/** 可接待客服的坐席（带在线状态），用于转接与总览筛选。 */
 export function useSupportAgents() {
   const agents = ref<SupportAgent[]>([])
   const agentsLoading = ref(false)

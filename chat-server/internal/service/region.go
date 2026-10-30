@@ -52,7 +52,6 @@ func (s *RegionService) Search(ctx context.Context, req *types.RegionSearchReque
 	return &types.RegionSearchResponse{List: toRegionItems(list), Truncated: truncated}, nil
 }
 
-// Trail 返回从省级到该区划自身的完整路径。
 func (s *RegionService) Trail(ctx context.Context, code string) (*types.RegionListResponse, error) {
 	trail := make([]*model.Region, 0, 4)
 	next := normalizeRegionCode(code)

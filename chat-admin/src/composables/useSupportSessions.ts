@@ -12,7 +12,6 @@ export function supportSessionTitle(s: SupportAdminSession) {
   return s.userNickname || s.userMobile || `用户#${s.userId}`
 }
 
-/** 每秒刷新的当前时间（秒），用于实时计算排队等待时长。 */
 export function useNowSec() {
   const now = ref(Math.floor(Date.now() / 1000))
   const timer = window.setInterval(() => {
@@ -34,7 +33,6 @@ function applySessionPatch(cur: SupportAdminSession, item: SupportAdminSession) 
   Object.assign(cur, item)
 }
 
-/** 静默刷新只替换第一页：已有对象原地更新，保留已经“加载更多”出来的尾部。 */
 function softMergeSessions(
   current: SupportAdminSession[],
   page1: SupportAdminSession[],

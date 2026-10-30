@@ -27,7 +27,6 @@ export interface ReportItem {
   targetUserId: number
   targetUserName?: string
   targetUserMobile?: string
-  /** 仅详情接口返回。 */
   targetUser?: UserGovernanceSummary
   reason: number
   reasonText: string
@@ -47,7 +46,6 @@ export interface ReportItem {
   updatedAt: string
 }
 
-/** status 为待处理时按提交时间正序返回（先进先出）。 */
 export interface ReportListRequest {
   page: number
   pageSize: number
@@ -72,9 +70,7 @@ export interface HandleReportRequest {
   status: number
   handleResult: string
   action: number
-  /** 禁言小时数，-1 永久；仅禁言动作使用。 */
   muteDuration: number
-  /** 同对象的其它待处理举报按相同结果一并结案。 */
   resolveSameTarget: boolean
 }
 

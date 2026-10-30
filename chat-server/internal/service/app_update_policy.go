@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"app/internal/model"
-	"app/internal/repository"
 	"app/internal/types"
 	"app/pkg/errs"
 	"app/pkg/logger"
@@ -41,7 +40,7 @@ func (s *AppReleaseService) CheckUpdate(ctx context.Context, req *types.AppUpdat
 	current, err := s.appReleaseRepo.GetCurrent(ctx, platform)
 	if err == nil && current != nil {
 		latestVer = current.Version
-		downloadURL = current.DownloadURL
+		downloadURL = s.downloadURL(current)
 		fileSize = current.FileSize
 		changelog = current.Changelog
 	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -67,11 +66,8 @@ func (s *AppReleaseService) CheckUpdate(ctx context.Context, req *types.AppUpdat
 		hasUpdate = cmpLatest < 0 || force
 	}
 
-	if force && strings.TrimSpace(downloadURL) == "" && platform != repository.AppPlatformH5 {
+	if downloadURL == "" {
 		force = false
-		hasUpdate = false
-	}
-	if hasUpdate && strings.TrimSpace(downloadURL) == "" && platform != repository.AppPlatformH5 {
 		hasUpdate = false
 	}
 
@@ -110,7 +106,7 @@ func (s *AppReleaseService) AdminListPolicies(ctx context.Context) (*types.AppUp
 		}
 		if cur, err := s.appReleaseRepo.GetCurrent(ctx, p.Platform); err == nil && cur != nil {
 			item.LatestVersion = cur.Version
-			item.DownloadURL = cur.DownloadURL
+			item.DownloadURL = s.downloadURL(cur)
 		}
 		out = append(out, item)
 	}
@@ -141,7 +137,7 @@ func (s *AppReleaseService) AdminSavePolicy(ctx context.Context, req *types.AppU
 	if cmp > 0 {
 		return errs.Invalid("最低支持版本不能高于当前对外版本 " + cur.Version)
 	}
-	if strings.TrimSpace(cur.DownloadURL) == "" && platform != repository.AppPlatformH5 {
+	if s.downloadURL(cur) == "" {
 		return errs.Invalid("当前对外版本缺少下载地址，无法启用强制更新门槛")
 	}
 

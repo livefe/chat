@@ -75,11 +75,7 @@ func (s *UserService) AdminDeactivate(ctx context.Context, employeeID uint, user
 
 func (s *UserService) finalizeDeactivation(ctx context.Context, user *model.User, meta deactivationContext) error {
 	oldMobile := user.Mobile
-	user.Mobile = anonymizedMobile(user.ID)
-	user.Nickname = model.DeactivatedNickname
 	oldAvatar := user.AvatarMediaID
-	user.AvatarMediaID = 0
-	user.Status = model.UserStatusDisabled
 
 	logEntry := &model.UserDeactivationLog{
 		UserID:     user.ID,
@@ -91,7 +87,7 @@ func (s *UserService) finalizeDeactivation(ctx context.Context, user *model.User
 		UserAgent:  meta.UserAgent,
 	}
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
-		if err := s.userRepo.Deactivate(ctx, user, oldMobile); err != nil {
+		if err := s.userRepo.Deactivate(ctx, user.ID, anonymizedMobile(user.ID)); err != nil {
 			return err
 		}
 		if oldAvatar > 0 && s.mediaSvc != nil {
@@ -121,6 +117,7 @@ func (s *UserService) finalizeDeactivation(ctx context.Context, user *model.User
 		s.log.Error(ctx, "注销用户失败", logger.Uint("user_id", user.ID), logger.Error(err))
 		return fmt.Errorf("注销失败，请稍后重试: %w", err)
 	}
+	s.userRepo.Invalidate(ctx, user.ID)
 	s.authSvc.Revoke(ctx, auth.SubjectTypeUser, user.ID)
 	s.endSession(ctx, user.ID)
 	s.log.Info(ctx, "用户已注销", logger.Uint("user_id", user.ID))

@@ -17,10 +17,8 @@ interface BaseQuery {
 export interface ListQueryOptions<T, Q extends BaseQuery> {
   fetch: (query: Q) => Promise<PageResult<T>>
   defaults: Q
-  /** 需要与地址栏同步的筛选字段及其类型；page / pageSize 总是同步。 */
   schema?: Partial<Record<Exclude<keyof Q, keyof BaseQuery>, ListFieldType>>
   errorMessage?: string
-  /** 弹窗、抽屉里的列表不应改动地址栏。 */
   syncUrl?: boolean
   immediate?: boolean
 }
@@ -131,7 +129,6 @@ export function useListQuery<T, Q extends BaseQuery>(options: ListQueryOptions<T
     }
   }
 
-  /** 按当前条件刷新（翻页、改每页条数、操作成功后都用它）。 */
   function fetchList() {
     writeUrl()
     return load()
@@ -147,7 +144,6 @@ export function useListQuery<T, Q extends BaseQuery>(options: ListQueryOptions<T
     return fetchList()
   }
 
-  /** 删除或移出当前页的数据后调用：当前页被删空时自动退回上一页。 */
   function afterRemove(count = 1) {
     if (query.page > 1 && list.value.length <= count) query.page -= 1
     return fetchList()

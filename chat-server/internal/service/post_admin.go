@@ -96,13 +96,13 @@ func (s *PostService) buildAdminPostItems(ctx context.Context, list []*model.Pos
 			employeeIDs = append(employeeIDs, p.AuditedBy)
 		}
 	}
-	profiles, err := s.userSvc.GetProfiles(ctx, uniqueNonZeroIDs(userIDs))
+	profiles, err := s.userSvc.GetProfiles(ctx, uniqueUints(userIDs))
 	if err != nil {
 		return nil, err
 	}
 	roomNames := make(map[uint]string, len(roomIDs))
 	if len(roomIDs) > 0 {
-		rooms, err := s.roomSvc.GetRoomsByIDs(ctx, uniqueNonZeroIDs(roomIDs))
+		rooms, err := s.roomSvc.GetRoomsByIDs(ctx, uniqueUints(roomIDs))
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +135,7 @@ func (s *PostService) buildAdminPostItems(ctx context.Context, list []*model.Pos
 
 func employeeNameMap(ctx context.Context, repo repository.EmployeeRepository, ids []uint) (map[uint]string, error) {
 	out := make(map[uint]string)
-	ids = uniqueNonZeroIDs(ids)
+	ids = uniqueUints(ids)
 	if len(ids) == 0 {
 		return out, nil
 	}
@@ -224,7 +224,6 @@ func (s *PostService) AdminMap(ctx context.Context, req *types.AdminPostMapQuery
 	}, nil
 }
 
-// postStatusTransitionAllowed 后台可执行的状态流转：审核（待审核→发布/驳回）、下架（发布→下架）、恢复上架（驳回/下架→发布）。
 func postStatusTransitionAllowed(from, to uint8) bool {
 	switch to {
 	case model.PostStatusPublished:
@@ -293,7 +292,7 @@ func (s *PostService) AdminBatchUpdateStatus(ctx context.Context, employeeID uin
 	if err := validatePostStatusReason(req.Status, reason); err != nil {
 		return nil, err
 	}
-	ids := uniqueNonZeroIDs(req.IDs)
+	ids := uniqueUints(req.IDs)
 	posts, err := s.postRepo.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
@@ -312,7 +311,6 @@ func (s *PostService) AdminBatchUpdateStatus(ctx context.Context, employeeID uin
 	return result, nil
 }
 
-// DisableByReport 举报处置下架；已下架时视为成功。处理人记录在举报单上。
 func (s *PostService) DisableByReport(ctx context.Context, postID uint) error {
 	p, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {

@@ -30,11 +30,9 @@ export interface RegionSearchResponse {
 export const getRegionChildren = (parentCode = '') =>
   request.get<RegionListResponse>('/api/admin/region/children', { parentCode })
 
-/** keyword 为纯数字时按区划码前缀匹配。 */
 export const searchRegion = (params: { keyword: string; level?: number; limit: number }) =>
   request.get<RegionSearchResponse>('/api/admin/region/search', params)
 
-/** 从省级到该区划自身的完整路径。 */
 export const getRegionTrail = (code: string) =>
   request.get<RegionListResponse>('/api/admin/region/trail', { code })
 

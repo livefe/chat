@@ -74,8 +74,8 @@ type AppUpdatePolicySaveRequest struct {
 }
 
 type AppReleasePublishMetaRequest struct {
-	Platform    string `json:"platform" binding:"required,oneof=h5"`
-	Version     string `json:"version" binding:"required,max=32"`
-	DownloadURL string `json:"downloadUrl" binding:"required,max=512"`
-	Changelog   string `json:"changelog" binding:"max=2000"`
+	Platform  string `json:"platform" binding:"required,oneof=h5"`
+	Version   string `json:"version" binding:"required,max=32"`
+	EntryURL  string `json:"entryUrl" binding:"required,max=512"`
+	Changelog string `json:"changelog" binding:"max=2000"`
 }

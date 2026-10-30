@@ -68,7 +68,6 @@ watch(
   },
 )
 
-// 向上加载更早消息时保持当前阅读位置。
 let prependAnchor: { height: number; top: number } | null = null
 const edgeIds = () =>
   [props.messages[0]?.id, props.messages[props.messages.length - 1]?.id] as const

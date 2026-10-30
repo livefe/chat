@@ -79,17 +79,17 @@ func (s *MessageService) prepareContent(ctx context.Context, userID uint, conten
 		}
 		return content, nil
 	case model.MessageContentTypeImage:
-		return prepareOwnedMediaContent(ctx, s.mediaSvc, userID, raw, model.MediaKindImage)
+		return prepareOwnedMediaContent(ctx, s.mediaSvc, UserUploader(userID), raw, model.MediaKindImage)
 	case model.MessageContentTypeVoice:
 		return s.prepareVoiceContent(ctx, userID, raw)
 	case model.MessageContentTypeVideo:
-		stored, err := prepareOwnedMediaContent(ctx, s.mediaSvc, userID, raw, model.MediaKindVideo)
+		stored, err := prepareOwnedMediaContent(ctx, s.mediaSvc, UserUploader(userID), raw, model.MediaKindVideo)
 		if err != nil {
 			return "", errs.Invalid("视频无效")
 		}
 		return stored, nil
 	case model.MessageContentTypeFile:
-		return prepareOwnedFileContent(ctx, s.mediaSvc, userID, raw)
+		return prepareOwnedFileContent(ctx, s.mediaSvc, UserUploader(userID), raw)
 	case model.MessageContentTypeLocation:
 		loc, err := normalizeLocationContent(raw)
 		if err != nil {
@@ -229,8 +229,7 @@ func (s *MessageService) bindMessageMedia(ctx context.Context, m *model.Message)
 	if err != nil || mediaID == 0 {
 		return errs.Invalid("媒体无效")
 	}
-	_, err = s.mediaSvc.Bind(ctx, m.FromUserID, mediaID, kind, model.MediaBizMessage, m.ID)
-	return err
+	return s.mediaSvc.Bind(ctx, UserUploader(m.FromUserID), mediaID, kind, model.MediaBizMessage, m.ID)
 }
 
 func (s *MessageService) ResolveReplyTarget(ctx context.Context, draft *model.Message, replyToID uint) (*model.Message, error) {

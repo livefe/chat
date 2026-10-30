@@ -3,7 +3,6 @@ export const UserStatus = {
   Enabled: 1,
 } as const
 
-/** 禁言时长（小时），-1 为永久。禁言入口与举报处置共用。 */
 export const MUTE_PRESETS = [
   { label: '1 小时', value: 1 },
   { label: '24 小时', value: 24 },

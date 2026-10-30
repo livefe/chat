@@ -202,7 +202,6 @@ async function openDetail(code: string) {
   }
 }
 
-/** 从省级到该区划自身的完整路径（不依赖详情权限）。 */
 async function fetchTrail(code: string): Promise<Crumb[]> {
   const res = await getRegionTrail(code)
   return (res.data.list || []).map(toCrumb)
@@ -270,7 +269,6 @@ async function goRoot() {
   await setCurrentPath([ROOT])
 }
 
-/** 定位到命中项的上级列表并高亮命中行；有详情权限时同时打开详情。 */
 async function locateFromSearch(row: RegionItem) {
   try {
     const trail = await fetchTrail(row.code)

@@ -92,7 +92,7 @@ func (s *UserService) AdminUpdate(ctx context.Context, req *types.UpdateUserRequ
 		return err
 	}
 
-	oldMobile := user.Mobile
+	var upd repository.UserUpdate
 	if req.Mobile != "" && req.Mobile != user.Mobile {
 		other, err := s.userRepo.GetByMobile(ctx, req.Mobile)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -101,7 +101,7 @@ func (s *UserService) AdminUpdate(ctx context.Context, req *types.UpdateUserRequ
 		if other != nil && other.ID != user.ID {
 			return errs.Conflict("手机号已被其他用户使用")
 		}
-		user.Mobile = req.Mobile
+		upd.Mobile = &req.Mobile
 	}
 
 	nickname := strings.TrimSpace(req.Nickname)
@@ -111,8 +111,8 @@ func (s *UserService) AdminUpdate(ctx context.Context, req *types.UpdateUserRequ
 	if err := assertClean(s.sensitive, nickname); err != nil {
 		return err
 	}
-	user.Nickname = nickname
-	if err := s.userRepo.UpdateMobile(ctx, user, oldMobile); err != nil {
+	upd.Nickname = &nickname
+	if err := s.userRepo.Update(ctx, user.ID, upd); err != nil {
 		s.log.Error(ctx, "更新用户失败", logger.Error(err))
 		return fmt.Errorf("更新用户失败: %w", err)
 	}
@@ -187,7 +187,6 @@ func (s *UserService) AdminLoginRecords(ctx context.Context, req *types.AdminUse
 	return &types.LoginRecordListResponse{Total: total, List: list}, nil
 }
 
-// AdminRevealMobile 返回完整手机号；已注销用户返回注销前的原号码。
 func (s *UserService) AdminRevealMobile(ctx context.Context, id uint) (string, error) {
 	user, err := s.userRepo.GetByIDUnscoped(ctx, id)
 	if err != nil {
@@ -258,7 +257,6 @@ func (s *UserService) adminGetActive(ctx context.Context, id uint) (*model.User,
 	return user, nil
 }
 
-// PunishMeta 处罚的操作人与来源，用于写入处罚记录。
 type PunishMeta struct {
 	EmployeeID uint
 	Reason     string
@@ -276,7 +274,7 @@ func (s *UserService) AdminMute(ctx context.Context, id uint, duration int, meta
 }
 
 func (s *UserService) AdminBatchMute(ctx context.Context, req *types.BatchUserMuteRequest, meta PunishMeta) (*types.BatchUserResult, error) {
-	ids := uniqueNonZeroIDs(req.IDs)
+	ids := uniqueUints(req.IDs)
 	users, err := s.userRepo.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("查询用户失败: %w", err)
@@ -296,26 +294,27 @@ func (s *UserService) AdminBatchMute(ctx context.Context, req *types.BatchUserMu
 	return result, nil
 }
 
-// applyMute 解除禁言时若用户本就未被禁言则不做任何变更。
 func (s *UserService) applyMute(ctx context.Context, user *model.User, duration int, meta PunishMeta) (bool, error) {
 	now := time.Now()
 	if duration == 0 && !isUserMuted(user, now) {
 		return false, nil
 	}
-	user.MutedUntil = calcMutedUntil(duration, now)
+	mutedUntil := calcMutedUntil(duration, now)
 	action := model.PunishActionMute
 	if duration == 0 {
 		action = model.PunishActionUnmute
 	}
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
-		if err := s.userRepo.Update(ctx, user); err != nil {
+		if err := s.userRepo.Update(ctx, user.ID, repository.UserUpdate{MutedUntil: &mutedUntil}); err != nil {
 			return err
 		}
-		return s.recordPunishment(ctx, user.ID, action, user.MutedUntil, meta)
+		return s.recordPunishment(ctx, user.ID, action, mutedUntil, meta)
 	}); err != nil {
 		s.log.Error(ctx, "更新用户禁言状态失败", logger.Uint("user_id", user.ID), logger.Error(err))
 		return false, fmt.Errorf("操作失败: %w", err)
 	}
+	s.userRepo.Invalidate(ctx, user.ID)
+	user.MutedUntil = mutedUntil
 	return true, nil
 }
 
@@ -335,7 +334,7 @@ func (s *UserService) AdminBatchStatus(ctx context.Context, req *types.BatchUser
 	if err := validateStatusReason(req.Status, meta.Reason); err != nil {
 		return nil, err
 	}
-	ids := uniqueNonZeroIDs(req.IDs)
+	ids := uniqueUints(req.IDs)
 	users, err := s.userRepo.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("查询用户失败: %w", err)
@@ -355,7 +354,6 @@ func (s *UserService) AdminBatchStatus(ctx context.Context, req *types.BatchUser
 	return result, nil
 }
 
-// DisableForReport 举报处置禁用账号；账号已禁用或已注销时视为成功。
 func (s *UserService) DisableForReport(ctx context.Context, userID uint, meta PunishMeta) error {
 	user, err := s.userRepo.GetByIDUnscoped(ctx, userID)
 	if err != nil {
@@ -378,18 +376,16 @@ func validateStatusReason(status uint8, reason string) error {
 	return nil
 }
 
-// applyStatus 状态未变化时视为成功且不重复记录。
 func (s *UserService) applyStatus(ctx context.Context, user *model.User, status uint8, meta PunishMeta) (bool, error) {
 	if user.Status == status {
 		return false, nil
 	}
-	user.Status = status
 	action := model.PunishActionEnable
 	if status == model.UserStatusDisabled {
 		action = model.PunishActionDisable
 	}
 	if err := database.Transaction(ctx, s.db, func(ctx context.Context) error {
-		if err := s.userRepo.Update(ctx, user); err != nil {
+		if err := s.userRepo.Update(ctx, user.ID, repository.UserUpdate{Status: &status}); err != nil {
 			return err
 		}
 		return s.recordPunishment(ctx, user.ID, action, 0, meta)
@@ -397,6 +393,8 @@ func (s *UserService) applyStatus(ctx context.Context, user *model.User, status 
 		s.log.Error(ctx, "更新用户状态失败", logger.Uint("user_id", user.ID), logger.Error(err))
 		return false, fmt.Errorf("更新用户状态失败: %w", err)
 	}
+	s.userRepo.Invalidate(ctx, user.ID)
+	user.Status = status
 	if status != model.UserStatusEnabled {
 		s.authSvc.Revoke(ctx, auth.SubjectTypeUser, user.ID)
 		_ = s.deviceSvc.DeleteByUserID(ctx, user.ID)
@@ -405,7 +403,6 @@ func (s *UserService) applyStatus(ctx context.Context, user *model.User, status 
 	return true, nil
 }
 
-// AdminWarn 记录警告并通过站内系统消息告知用户。
 func (s *UserService) AdminWarn(ctx context.Context, userID uint, meta PunishMeta) error {
 	if _, err := s.adminGetActive(ctx, userID); err != nil {
 		return err

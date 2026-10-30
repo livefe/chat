@@ -48,7 +48,6 @@ type PermissionItem struct {
 }
 
 type PermissionTreeRequest struct {
-	// 为 true 时只返回可分配给角色的启用菜单与按钮
 	Assignable bool `form:"assignable"`
 }
 

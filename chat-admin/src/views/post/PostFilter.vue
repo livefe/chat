@@ -120,7 +120,6 @@ const sort = defineModel<'asc' | 'desc'>('sort', { required: true })
 const includeDeleted = defineModel<boolean>('includeDeleted', { required: true })
 const emit = defineEmits<{ search: []; reset: [] }>()
 
-/** 输入框里只接受正整数 ID，清空即不限。 */
 function positiveIdText(model: Ref<number | undefined>) {
   return computed({
     get: () => (model.value ? String(model.value) : ''),

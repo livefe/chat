@@ -219,7 +219,6 @@ func (s *RoleService) AssignPermissions(ctx context.Context, operatorID uint, re
 	return nil
 }
 
-// scopePermissionIDs 只在操作者自身权限范围内调整；角色原有的、超出操作者范围的权限原样保留。
 func (s *RoleService) scopePermissionIDs(ctx context.Context, operatorID, roleID uint, requested []uint) ([]uint, error) {
 	isSuper, err := s.permSvc.IsSuperAdmin(ctx, operatorID)
 	if err != nil {

@@ -93,7 +93,6 @@ const { loading, error, list, total, query, fetchList, handleSearch, handleReset
   errorMessage: '获取消息列表失败',
 })
 
-/** ?contextId=<消息ID> 打开该消息的上下文，打开后从地址栏移除，避免刷新时重复弹出。 */
 function openContextFromRoute() {
   const raw = route.query.contextId
   const id = Number(Array.isArray(raw) ? raw[0] : raw)

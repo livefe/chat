@@ -60,7 +60,6 @@ func NewSensitiveWordService(
 	return &SensitiveWordService{log: log, db: db, cache: c, instanceID: instanceID, repo: repo}
 }
 
-// Start 加载词库并订阅其它实例发出的重载通知。
 func (s *SensitiveWordService) Start(ctx context.Context) error {
 	if err := s.Load(ctx); err != nil {
 		return err
@@ -122,7 +121,6 @@ func (s *SensitiveWordService) Load(ctx context.Context) error {
 	return nil
 }
 
-// reload 在词库变更后刷新本实例，并通知其它实例刷新。
 func (s *SensitiveWordService) reload(ctx context.Context) {
 	if err := s.Load(ctx); err != nil {
 		s.log.Error(ctx, "屏蔽词重载失败", logger.Error(err))
@@ -204,7 +202,6 @@ func (s *SensitiveWordService) AdminList(ctx context.Context, req *types.Sensiti
 	return &types.SensitiveWordListResponse{Total: total, List: items}, nil
 }
 
-// normalizedWordIndex 返回「归一化后的词 → 原词」，按匹配规则判重。
 func (s *SensitiveWordService) normalizedWordIndex(ctx context.Context, excludeID uint) (map[string]string, error) {
 	all, err := s.repo.ListAll(ctx)
 	if err != nil {

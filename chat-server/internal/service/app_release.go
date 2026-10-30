@@ -17,6 +17,7 @@ import (
 	"app/pkg/storage"
 	"app/pkg/utils"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -63,7 +64,7 @@ func (s *AppReleaseService) ListCurrent(ctx context.Context) (*types.AppReleaseP
 			Platform:     row.Platform,
 			PlatformText: platformLabel(row.Platform),
 			Version:      row.Version,
-			DownloadURL:  row.DownloadURL,
+			DownloadURL:  s.downloadURL(row),
 			FileSize:     row.FileSize,
 			Changelog:    row.Changelog,
 		})
@@ -78,7 +79,7 @@ func (s *AppReleaseService) AdminList(ctx context.Context, req *types.AppRelease
 	}
 	items := make([]*types.AppReleaseItem, 0, len(list))
 	for _, row := range list {
-		items = append(items, toAppReleaseItem(row))
+		items = append(items, s.toAppReleaseItem(row))
 	}
 	return &types.AppReleaseListResponse{Total: total, List: items}, nil
 }
@@ -109,31 +110,31 @@ func (s *AppReleaseService) AdminUpload(ctx context.Context, platform, version, 
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
 
-	objectKey := path.Join(appObjectDir, platform+"-"+version+ext)
-	url, err := s.uploadAppPackage(ctx, objectKey, reader, size)
-	if err != nil {
+	objectKey := path.Join(appObjectDir, platform+"-"+version+"-"+uuid.NewString()[:8]+ext)
+	if err := s.uploadAppPackage(ctx, objectKey, reader, size); err != nil {
 		return nil, err
 	}
 
 	row := &model.AppRelease{
-		Platform:    platform,
-		Version:     version,
-		DownloadURL: url,
-		FileSize:    size,
-		Changelog:   changelog,
-		IsCurrent:   0,
+		Platform:  platform,
+		Version:   version,
+		ObjectKey: objectKey,
+		FileSize:  size,
+		Changelog: changelog,
+		IsCurrent: 0,
 	}
 	if err := s.appReleaseRepo.Create(ctx, row); err != nil {
 		s.log.Error(ctx, "保存安装包记录失败", logger.Error(err))
+		s.deletePackage(ctx, objectKey)
 		return nil, fmt.Errorf("保存失败，请稍后重试: %w", err)
 	}
-	return toAppReleaseItem(row), nil
+	return s.toAppReleaseItem(row), nil
 }
 
 func (s *AppReleaseService) AdminPublishMeta(ctx context.Context, req *types.AppReleasePublishMetaRequest) (*types.AppReleaseItem, error) {
 	platform := strings.TrimSpace(req.Platform)
 	version := strings.TrimSpace(req.Version)
-	downloadURL := strings.TrimSpace(req.DownloadURL)
+	entryURL := strings.TrimSpace(req.EntryURL)
 	changelog := strings.TrimSpace(req.Changelog)
 	if platform != repository.AppPlatformH5 {
 		return nil, errs.Invalid("仅支持 H5 登记版本")
@@ -141,10 +142,10 @@ func (s *AppReleaseService) AdminPublishMeta(ctx context.Context, req *types.App
 	if !utils.ValidSemver(version) {
 		return nil, errs.Invalid("版本号格式不正确，需为 x.y.z")
 	}
-	if downloadURL == "" {
+	if entryURL == "" {
 		return nil, errs.Invalid("请填写入口地址")
 	}
-	if !strings.HasPrefix(downloadURL, "https://") && !strings.HasPrefix(downloadURL, "http://") {
+	if !strings.HasPrefix(entryURL, "https://") && !strings.HasPrefix(entryURL, "http://") {
 		return nil, errs.Invalid("入口地址必须以 http:// 或 https:// 开头")
 	}
 
@@ -157,18 +158,18 @@ func (s *AppReleaseService) AdminPublishMeta(ctx context.Context, req *types.App
 	}
 
 	row := &model.AppRelease{
-		Platform:    platform,
-		Version:     version,
-		DownloadURL: downloadURL,
-		FileSize:    0,
-		Changelog:   changelog,
-		IsCurrent:   0,
+		Platform:  platform,
+		Version:   version,
+		EntryURL:  entryURL,
+		FileSize:  0,
+		Changelog: changelog,
+		IsCurrent: 0,
 	}
 	if err := s.appReleaseRepo.Create(ctx, row); err != nil {
 		s.log.Error(ctx, "保存 H5 版本记录失败", logger.Error(err))
 		return nil, fmt.Errorf("保存失败，请稍后重试: %w", err)
 	}
-	return toAppReleaseItem(row), nil
+	return s.toAppReleaseItem(row), nil
 }
 
 func (s *AppReleaseService) AdminSetCurrent(ctx context.Context, id uint) error {
@@ -179,7 +180,7 @@ func (s *AppReleaseService) AdminSetCurrent(ctx context.Context, id uint) error 
 	if err != nil {
 		return fmt.Errorf("查询失败: %w", err)
 	}
-	if strings.TrimSpace(row.DownloadURL) == "" && row.Platform != repository.AppPlatformH5 {
+	if s.downloadURL(row) == "" {
 		return errs.Invalid("该版本缺少下载地址，不能设为当前对外版本")
 	}
 	err = database.Transaction(ctx, s.db, func(ctx context.Context) error {
@@ -228,7 +229,6 @@ func (s *AppReleaseService) AdminUnsetCurrent(ctx context.Context, id uint) erro
 	return nil
 }
 
-// AdminDelete 删除误传或作废的非当前版本，安装包文件一并从存储中删除。
 func (s *AppReleaseService) AdminDelete(ctx context.Context, id uint) error {
 	row, err := s.appReleaseRepo.GetByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -247,13 +247,24 @@ func (s *AppReleaseService) AdminDelete(ctx context.Context, id uint) error {
 		s.log.Error(ctx, "删除版本记录失败", logger.Error(err))
 		return fmt.Errorf("删除失败，请稍后重试: %w", err)
 	}
-	if row.Platform != repository.AppPlatformH5 {
-		objectKey := path.Join(appObjectDir, row.Platform+"-"+row.Version+packageExtFor(row.Platform))
-		if err := s.store.Delete(ctx, objectKey); err != nil {
-			s.log.Warn(ctx, "删除安装包文件失败", logger.String("key", objectKey), logger.Error(err))
-		}
+	if row.ObjectKey != "" {
+		s.deletePackage(ctx, row.ObjectKey)
 	}
 	return nil
+}
+
+func (s *AppReleaseService) downloadURL(row *model.AppRelease) string {
+	if row.ObjectKey != "" {
+		return s.store.URL(row.ObjectKey)
+	}
+	return row.EntryURL
+}
+
+func (s *AppReleaseService) deletePackage(ctx context.Context, objectKey string) {
+	ctx = context.WithoutCancel(ctx)
+	if err := s.store.Delete(ctx, objectKey); err != nil {
+		s.log.Warn(ctx, "删除安装包文件失败", logger.String("key", objectKey), logger.Error(err))
+	}
 }
 
 func validPlatform(platform string) bool {
@@ -275,40 +286,37 @@ func packageExtFor(platform string) string {
 	return ".apk"
 }
 
-const packageMaxSizeMB = 100
-const packageMaxBytes = int64(packageMaxSizeMB) * 1024 * 1024
+const (
+	AppPackageMaxMB    = 100
+	AppPackageMaxBytes = int64(AppPackageMaxMB) << 20
+)
 
-func (s *AppReleaseService) uploadAppPackage(ctx context.Context, objectKey string, reader io.Reader, size int64) (string, error) {
-	objectKey = strings.Trim(strings.TrimSpace(objectKey), "/")
-	if objectKey == "" || strings.Contains(objectKey, "..") {
-		return "", errs.Invalid("非法安装包路径")
-	}
+func (s *AppReleaseService) uploadAppPackage(ctx context.Context, objectKey string, reader io.Reader, size int64) error {
 	if size <= 0 {
-		return "", errs.Invalid("文件不能为空")
+		return errs.Invalid("文件不能为空")
 	}
-	if size > packageMaxBytes {
-		return "", errs.Invalid(fmt.Sprintf("安装包大小不能超过 %dMB", packageMaxSizeMB))
+	if size > AppPackageMaxBytes {
+		return errs.Invalid(fmt.Sprintf("安装包大小不能超过 %dMB", AppPackageMaxMB))
 	}
 
-	limited := &limitedReader{r: reader, remaining: packageMaxBytes}
-	url, err := s.store.Upload(objectKey, limited, "application/octet-stream")
-	if err != nil {
+	limited := &limitedReader{r: reader, remaining: AppPackageMaxBytes}
+	if err := s.store.Put(ctx, objectKey, limited, size, "application/octet-stream"); err != nil {
 		if errors.Is(err, errReaderTooLarge) {
-			return "", errs.Invalid(fmt.Sprintf("安装包大小不能超过 %dMB", packageMaxSizeMB))
+			return errs.Invalid(fmt.Sprintf("安装包大小不能超过 %dMB", AppPackageMaxMB))
 		}
 		s.log.Error(ctx, "上传安装包失败", logger.Error(err))
-		return "", fmt.Errorf("上传失败，请稍后重试: %w", err)
+		return fmt.Errorf("上传失败，请稍后重试: %w", err)
 	}
-	return url, nil
+	return nil
 }
 
-func toAppReleaseItem(row *model.AppRelease) *types.AppReleaseItem {
+func (s *AppReleaseService) toAppReleaseItem(row *model.AppRelease) *types.AppReleaseItem {
 	return &types.AppReleaseItem{
 		ID:           row.ID,
 		Platform:     row.Platform,
 		PlatformText: platformLabel(row.Platform),
 		Version:      row.Version,
-		DownloadURL:  row.DownloadURL,
+		DownloadURL:  s.downloadURL(row),
 		FileSize:     row.FileSize,
 		Changelog:    row.Changelog,
 		IsCurrent:    row.IsCurrent,

@@ -13,7 +13,6 @@ export function messageScopeLabel(scope?: number) {
   return MESSAGE_SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? '消息'
 }
 
-/** 被举报对象的一行摘要。 */
 export function reportTargetPreview(row: ReportItem, maxLen = 60) {
   const ctx = row.context
   if (row.targetType === ReportTargetType.Post) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"app/internal/repository"
 	"app/internal/types"
 	"app/pkg/errs"
 	"app/pkg/logger"
@@ -97,9 +98,7 @@ func (s *UserService) ChangeMobile(ctx context.Context, userID uint, req *types.
 		return err
 	}
 
-	oldMobile := user.Mobile
-	user.Mobile = req.NewMobile
-	if err := s.userRepo.UpdateMobile(ctx, user, oldMobile); err != nil {
+	if err := s.userRepo.Update(ctx, userID, repository.UserUpdate{Mobile: &req.NewMobile}); err != nil {
 		s.log.Error(ctx, "更换手机号失败", logger.Error(err))
 		return fmt.Errorf("更换失败: %w", err)
 	}

@@ -6,12 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-)
+	"app/pkg/storage"
 
-const (
-	staticURLPath = "/static"
-	staticRootDir = "./data"
+	"github.com/gin-gonic/gin"
 )
 
 var staticMIMEByExt = map[string]string{
@@ -36,14 +33,15 @@ func registerStaticRoutes(engine *gin.Engine) {
 		return
 	}
 
-	abs, err := filepath.Abs(staticRootDir)
+	abs, err := filepath.Abs(storage.LocalRootDir)
 	if err != nil {
 		return
 	}
 	_ = os.MkdirAll(abs, 0o755)
 
+	prefix := storage.LocalURLPrefix
 	engine.Use(func(c *gin.Context) {
-		if !strings.HasPrefix(c.Request.URL.Path, staticURLPath+"/") && c.Request.URL.Path != staticURLPath {
+		if !strings.HasPrefix(c.Request.URL.Path, prefix+"/") && c.Request.URL.Path != prefix {
 			c.Next()
 			return
 		}
@@ -52,6 +50,7 @@ func registerStaticRoutes(engine *gin.Engine) {
 		c.Header("Access-Control-Allow-Headers", "Range, Content-Type")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
 		c.Header("Accept-Ranges", "bytes")
+		c.Header("X-Content-Type-Options", "nosniff")
 		if ext := strings.ToLower(filepath.Ext(c.Request.URL.Path)); ext != "" {
 			if mime, ok := staticMIMEByExt[ext]; ok {
 				c.Header("Content-Type", mime)
@@ -64,5 +63,5 @@ func registerStaticRoutes(engine *gin.Engine) {
 		c.Next()
 	})
 
-	engine.Static(staticURLPath, abs)
+	engine.Static(prefix, abs)
 }

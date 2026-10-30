@@ -1,18 +1,17 @@
 package types
 
 type DepartmentItem struct {
-	ID            uint   `json:"id"`
-	ParentID      uint   `json:"parentId"`
-	ParentName    string `json:"parentName"`
-	Name          string `json:"name"`
-	Path          string `json:"path"`
-	Level         uint8  `json:"level"`
-	Sort          int    `json:"sort"`
-	Remark        string `json:"remark"`
-	Status        uint8  `json:"status"`
-	StatusText    string `json:"statusText"`
-	EmployeeCount int64  `json:"employeeCount"`
-	// 含全部下级部门的员工数
+	ID                 uint   `json:"id"`
+	ParentID           uint   `json:"parentId"`
+	ParentName         string `json:"parentName"`
+	Name               string `json:"name"`
+	Path               string `json:"path"`
+	Level              uint8  `json:"level"`
+	Sort               int    `json:"sort"`
+	Remark             string `json:"remark"`
+	Status             uint8  `json:"status"`
+	StatusText         string `json:"statusText"`
+	EmployeeCount      int64  `json:"employeeCount"`
 	TotalEmployeeCount int64  `json:"totalEmployeeCount"`
 	CreatedAt          string `json:"createdAt"`
 	UpdatedAt          string `json:"updatedAt"`

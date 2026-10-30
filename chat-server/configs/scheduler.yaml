@@ -6,9 +6,9 @@ jobs:
     desc: "同步民政部行政区划数据"
     timeout: 45m
     enabled: true
-  - name: media.cleanup_orphans
+  - name: media.cleanup
     spec: "15 * * * *"
-    desc: "清理未绑定的孤儿媒体"
+    desc: "回收超时未绑定的媒体并删除已废弃的文件"
     timeout: 10m
     enabled: true
   - name: ad.mark_expired

@@ -52,7 +52,6 @@ export interface AdminMessageListResponse {
 export const getMessageList = (params: AdminMessageListRequest) =>
   request.get<AdminMessageListResponse>('/api/admin/message/list', params)
 
-/** beforeId / afterId 用于在已加载的上下文两端继续加载。 */
 export const getMessageContext = (
   id: number,
   options: { limit?: number; beforeId?: number; afterId?: number } = {},
@@ -67,7 +66,6 @@ export const getMessageContext = (
 export interface DeleteMessagesRequest {
   ids: number[]
   reason: string
-  /** 0 不禁言；-1 永久；其余为小时数。 */
   muteDuration: number
 }
 

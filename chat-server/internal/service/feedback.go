@@ -52,7 +52,7 @@ var (
 type FeedbackService struct {
 	log          *logger.Logger
 	feedbackRepo repository.FeedbackRepository
-	userRepo     *UserStore
+	userRepo     repository.UserRepository
 	employeeRepo repository.EmployeeRepository
 	mediaSvc     *MediaService
 }
@@ -60,7 +60,7 @@ type FeedbackService struct {
 func NewFeedbackService(
 	log *logger.Logger,
 	feedbackRepo repository.FeedbackRepository,
-	userRepo *UserStore,
+	userRepo repository.UserRepository,
 	employeeRepo repository.EmployeeRepository,
 	mediaSvc *MediaService,
 ) *FeedbackService {
@@ -130,7 +130,7 @@ func (s *FeedbackService) Submit(ctx context.Context, userID uint, req *types.Su
 		return fmt.Errorf("提交失败，请稍后重试: %w", err)
 	}
 	if len(images) > 0 && s.mediaSvc != nil {
-		if _, err := s.mediaSvc.BindMany(ctx, userID, images, model.MediaKindImage, model.MediaBizFeedback, fb.ID); err != nil {
+		if err := s.mediaSvc.BindMany(ctx, UserUploader(userID), images, model.MediaKindImage, model.MediaBizFeedback, fb.ID); err != nil {
 			return err
 		}
 	}
@@ -185,7 +185,7 @@ func (s *FeedbackService) AdminList(ctx context.Context, req *types.AdminFeedbac
 		employeeIDs = append(employeeIDs, fb.EmployeeID)
 	}
 	userMap := make(map[uint]*model.User)
-	if ids := uniqueNonZeroIDs(userIDs); len(ids) > 0 {
+	if ids := uniqueUints(userIDs); len(ids) > 0 {
 		users, err := s.userRepo.GetByIDs(ctx, ids)
 		if err != nil {
 			return nil, fmt.Errorf("查询反馈列表失败: %w", err)
@@ -195,7 +195,7 @@ func (s *FeedbackService) AdminList(ctx context.Context, req *types.AdminFeedbac
 		}
 	}
 	employeeMap := make(map[uint]*model.Employee)
-	if ids := uniqueNonZeroIDs(employeeIDs); len(ids) > 0 {
+	if ids := uniqueUints(employeeIDs); len(ids) > 0 {
 		employees, err := s.employeeRepo.GetByIDs(ctx, ids)
 		if err != nil {
 			return nil, fmt.Errorf("查询反馈列表失败: %w", err)
@@ -263,9 +263,8 @@ func (s *FeedbackService) AdminUpdateStatus(ctx context.Context, employeeID uint
 	return nil
 }
 
-// AdminBatchClose 批量关闭待处理反馈；非待处理的记录计入跳过。
 func (s *FeedbackService) AdminBatchClose(ctx context.Context, employeeID uint, req *types.AdminFeedbackBatchCloseRequest) (*types.AdminFeedbackBatchResult, error) {
-	ids := uniqueNonZeroIDs(req.IDs)
+	ids := uniqueUints(req.IDs)
 	n, err := s.feedbackRepo.UpdatePendingByIDs(ctx, ids, map[string]any{
 		"status":        model.FeedbackStatusClosed,
 		"handle_result": strings.TrimSpace(req.HandleResult),

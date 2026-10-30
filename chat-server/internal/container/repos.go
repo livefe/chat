@@ -48,7 +48,7 @@ type Repos struct {
 
 func buildRepos(in *Infra) *Repos {
 	return &Repos{
-		User:                 repository.NewUserRepository(in.DB),
+		User:                 repository.NewUserRepository(in.DB, in.Cache),
 		Employee:             repository.NewEmployeeRepository(in.DB),
 		SMSRecord:            repository.NewSMSRecordRepository(in.DB),
 		UserLoginRecord:      repository.NewUserLoginRecordRepository(in.DB),

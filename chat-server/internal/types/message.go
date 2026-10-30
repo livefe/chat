@@ -98,7 +98,6 @@ type AdminMessageContextResponse struct {
 	List []AdminMessageItem `json:"list"`
 }
 
-// AdminMessageContextRequest BeforeID / AfterID 用于在已加载的上下文两端继续翻页。
 type AdminMessageContextRequest struct {
 	ID       uint `form:"id" binding:"required"`
 	Limit    int  `form:"limit" binding:"required,min=1,max=100"`
@@ -106,7 +105,6 @@ type AdminMessageContextRequest struct {
 	AfterID  uint `form:"afterId"`
 }
 
-// AdminMessageDeleteRequest MuteDuration 为 0 表示不禁言发送者，-1 为永久，其余为小时数。
 type AdminMessageDeleteRequest struct {
 	IDs          []uint `json:"ids" binding:"required,min=1,max=100"`
 	Reason       string `json:"reason" binding:"required,max=200"`

@@ -40,7 +40,6 @@ type AuditLogInput struct {
 	ResultMessage string
 }
 
-// 菜单编码 → 审计目标类型。
 var auditTargetTypeByModule = map[string]string{
 	"user:account":        "user",
 	"user:feedback":       "feedback",
@@ -87,7 +86,6 @@ var auditTargetTypeText = map[string]string{
 	"ad_setting":      "投放设置",
 }
 
-// 请求体中可识别的目标 ID 字段，按优先级排列；targetType 为空时沿用模块的目标类型。
 var auditTargetKeys = []struct {
 	key        string
 	targetType string
@@ -134,7 +132,6 @@ func auditRouteKey(method, path string) string {
 	return strings.ToUpper(method) + " " + path
 }
 
-// ExcludeRoutes 须在服务开始处理请求前调用，routes 形如 "POST /api/admin/im/messages"。
 func (s *AuditLogService) ExcludeRoutes(routes ...string) {
 	for _, r := range routes {
 		method, path, ok := strings.Cut(strings.TrimSpace(r), " ")

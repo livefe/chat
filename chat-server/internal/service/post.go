@@ -72,7 +72,6 @@ func postPublished(p *model.Post) bool {
 	return p != nil && p.Status == model.PostStatusPublished
 }
 
-// ownerAuditRemark 只在驳回/下架时把审核说明返回给作者本人。
 func ownerAuditRemark(p *model.Post) string {
 	if p.Status == model.PostStatusRejected || p.Status == model.PostStatusDisabled {
 		return p.AuditRemark

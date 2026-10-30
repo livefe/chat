@@ -48,12 +48,13 @@ type SupportService struct {
 	db                *database.DB
 	supportStateRepo  repository.IMSupportStateRepository
 	supportConfigRepo repository.IMSupportConfigRepository
-	userRepo          *UserStore
+	userRepo          repository.UserRepository
 	employeeRepo      repository.EmployeeRepository
 	imSvc             *IMService
 	employees         employeeMessenger
 	users             userMessenger
 	permSvc           *PermissionService
+	mediaSvc          *MediaService
 }
 
 func NewSupportService(
@@ -62,12 +63,13 @@ func NewSupportService(
 	db *database.DB,
 	supportStateRepo repository.IMSupportStateRepository,
 	supportConfigRepo repository.IMSupportConfigRepository,
-	userRepo *UserStore,
+	userRepo repository.UserRepository,
 	employeeRepo repository.EmployeeRepository,
 	imSvc *IMService,
 	employees employeeMessenger,
 	users userMessenger,
 	permSvc *PermissionService,
+	mediaSvc *MediaService,
 ) *SupportService {
 	return &SupportService{
 		log:               log,
@@ -81,6 +83,17 @@ func NewSupportService(
 		employees:         employees,
 		users:             users,
 		permSvc:           permSvc,
+		mediaSvc:          mediaSvc,
+	}
+}
+
+func (s *SupportService) toProfile(ctx context.Context, cfg *model.IMSupportConfig) types.SupportProfileResponse {
+	return types.SupportProfileResponse{
+		BrandName:      cfg.BrandName,
+		BrandAvatarURL: s.mediaSvc.ResolveURL(ctx, cfg.BrandAvatarMediaID),
+		WelcomeText:    cfg.WelcomeText,
+		OfflineText:    cfg.OfflineText,
+		Enabled:        cfg.Enabled == 1,
 	}
 }
 
@@ -206,8 +219,6 @@ func (s *SupportService) requireViewAll(ctx context.Context, employeeID uint) er
 	return nil
 }
 
-// assertAgentAccess 校验员工能否查看会话消息：督导可看全部；坐席可看自己参与过的会话，
-// 以及自己服务过的用户的已结案历史会话；排队中会话只有督导可看。
 func (s *SupportService) assertAgentAccess(ctx context.Context, employeeID, conversationID uint) (*model.IMSupportState, *model.IMConversation, error) {
 	st, err := s.supportStateRepo.GetByConversationID(ctx, conversationID)
 	if err != nil {
@@ -254,7 +265,7 @@ func (s *SupportService) sessionItemForUser(ctx context.Context, userID, convers
 	}
 	if cfg, err := s.loadConfig(ctx); err == nil && cfg != nil {
 		item.BrandName = cfg.BrandName
-		item.BrandAvatarURL = cfg.BrandAvatarURL
+		item.BrandAvatarURL = s.mediaSvc.ResolveURL(ctx, cfg.BrandAvatarMediaID)
 	}
 	if st != nil {
 		item.AssigneeEmployeeID = st.AssigneeEmployeeID
@@ -283,7 +294,6 @@ func (s *SupportService) employeeNames(ctx context.Context, rows []repository.Su
 	return out
 }
 
-// toAdminList 组装后台会话列表；employeeID > 0 时附带该员工的未读数。
 func (s *SupportService) toAdminList(ctx context.Context, employeeID uint, rows []repository.SupportListRow, total int64) *types.SupportAdminSessionListResponse {
 	userIDs := make([]uint, 0, len(rows))
 	for _, r := range rows {
@@ -396,14 +406,9 @@ func (s *SupportService) AdminGetConfig(ctx context.Context) (*types.SupportAdmi
 		return nil, err
 	}
 	return &types.SupportAdminConfigResponse{
-		SupportProfileResponse: types.SupportProfileResponse{
-			BrandName:      cfg.BrandName,
-			BrandAvatarURL: cfg.BrandAvatarURL,
-			WelcomeText:    cfg.WelcomeText,
-			OfflineText:    cfg.OfflineText,
-			Enabled:        cfg.Enabled == 1,
-		},
-		QuickReplies: toQuickReplyItems(cfg.QuickReplies),
+		SupportProfileResponse: s.toProfile(ctx, cfg),
+		BrandAvatarMediaID:     cfg.BrandAvatarMediaID,
+		QuickReplies:           toQuickReplyItems(cfg.QuickReplies),
 	}, nil
 }
 
@@ -415,7 +420,7 @@ func (s *SupportService) AdminQuickReplies(ctx context.Context) (*types.SupportQ
 	return &types.SupportQuickReplyListResponse{List: toQuickReplyItems(cfg.QuickReplies)}, nil
 }
 
-func (s *SupportService) AdminUpdateConfig(ctx context.Context, req *types.SupportConfigUpdateRequest) (*types.SupportAdminConfigResponse, error) {
+func (s *SupportService) AdminUpdateConfig(ctx context.Context, operatorID uint, req *types.SupportConfigUpdateRequest) (*types.SupportAdminConfigResponse, error) {
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -433,16 +438,23 @@ func (s *SupportService) AdminUpdateConfig(ctx context.Context, req *types.Suppo
 		}
 		replies = append(replies, model.SupportQuickReply{Title: title, Content: content})
 	}
+	oldAvatarID, newAvatarID := cfg.BrandAvatarMediaID, req.BrandAvatarMediaID
 	cfg.BrandName = brand
-	cfg.BrandAvatarURL = strings.TrimSpace(req.BrandAvatarURL)
+	cfg.BrandAvatarMediaID = newAvatarID
 	cfg.WelcomeText = strings.TrimSpace(req.WelcomeText)
 	cfg.OfflineText = strings.TrimSpace(req.OfflineText)
 	cfg.QuickReplies = replies
 	if req.Enabled != nil {
 		cfg.Enabled = *req.Enabled
 	}
-	if err := s.supportConfigRepo.Save(ctx, cfg); err != nil {
-		return nil, fmt.Errorf("保存失败: %w", err)
+	persist := func() error {
+		if err := s.supportConfigRepo.Save(ctx, cfg); err != nil {
+			return fmt.Errorf("保存失败: %w", err)
+		}
+		return nil
+	}
+	if err := s.mediaSvc.ReplaceSingle(ctx, EmployeeUploader(operatorID), oldAvatarID, newAvatarID, model.MediaKindImage, model.MediaBizSupportBrand, cfg.ID, persist); err != nil {
+		return nil, err
 	}
 	return s.AdminGetConfig(ctx)
 }

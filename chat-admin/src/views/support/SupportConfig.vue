@@ -32,13 +32,15 @@
             >
               <el-button :loading="uploading" :disabled="!canUploadAvatar">上传头像</el-button>
             </el-upload>
-            <el-input
-              v-model="form.brandAvatarUrl"
-              placeholder="或粘贴图片 URL"
-              maxlength="255"
-              clearable
-              :disabled="!canSave"
-            />
+            <el-button
+              v-if="form.brandAvatarMediaId && canSave"
+              link
+              type="danger"
+              :disabled="uploading"
+              @click="clearAvatar"
+            >
+              清除
+            </el-button>
           </div>
         </div>
       </el-form-item>
@@ -153,6 +155,7 @@ let rowKey = 0
 
 const form = reactive({
   brandName: '',
+  brandAvatarMediaId: 0,
   brandAvatarUrl: '',
   welcomeText: '',
   offlineText: '',
@@ -165,6 +168,7 @@ const canUploadAvatar = computed(() => canSave.value && can(PERM.OpsUpload))
 
 function fillForm(data: SupportConfig) {
   form.brandName = data.brandName || ''
+  form.brandAvatarMediaId = data.brandAvatarMediaId || 0
   form.brandAvatarUrl = data.brandAvatarUrl || ''
   form.welcomeText = data.welcomeText || ''
   form.offlineText = data.offlineText || ''
@@ -200,6 +204,7 @@ const onUploadAvatar: UploadRequestHandler = async (options) => {
   uploading.value = true
   try {
     const { data } = await uploadImImage(options.file as File)
+    form.brandAvatarMediaId = data.id
     form.brandAvatarUrl = data.url || ''
     options.onSuccess?.(data)
     ElMessage.success('头像已上传，请保存配置')
@@ -209,6 +214,11 @@ const onUploadAvatar: UploadRequestHandler = async (options) => {
   } finally {
     uploading.value = false
   }
+}
+
+function clearAvatar() {
+  form.brandAvatarMediaId = 0
+  form.brandAvatarUrl = ''
 }
 
 async function handleSave() {
@@ -240,7 +250,7 @@ async function handleSave() {
   try {
     const { data } = await updateSupportConfig({
       brandName: form.brandName.trim(),
-      brandAvatarUrl: form.brandAvatarUrl.trim(),
+      brandAvatarMediaId: form.brandAvatarMediaId,
       welcomeText: form.welcomeText.trim(),
       offlineText: form.offlineText.trim(),
       enabled: form.enabled ? 1 : 0,

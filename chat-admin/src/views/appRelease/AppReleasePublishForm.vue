@@ -39,7 +39,7 @@
       </el-form-item>
       <el-form-item v-if="isH5Form" label="入口地址" required>
         <el-input
-          v-model="form.downloadUrl"
+          v-model="form.entryUrl"
           placeholder="用户更新时打开的地址，如 https://example.com/"
           maxlength="512"
           style="width: 480px"
@@ -110,7 +110,7 @@ const form = reactive({
   platform: (platformOptions.value[0]?.value || 'android') as AppPlatform,
   version: '',
   changelog: '',
-  downloadUrl: '',
+  entryUrl: '',
 })
 const fileList = ref<UploadUserFile[]>([])
 const selectedFile = ref<File | null>(null)
@@ -186,8 +186,8 @@ async function handleSubmit() {
     return
   }
   if (platform === 'h5') {
-    const downloadUrl = form.downloadUrl.trim()
-    if (!/^https?:\/\//.test(downloadUrl)) {
+    const entryUrl = form.entryUrl.trim()
+    if (!/^https?:\/\//.test(entryUrl)) {
       ElMessage.warning('请填写以 http:// 或 https:// 开头的入口地址')
       return
     }
@@ -196,11 +196,11 @@ async function handleSubmit() {
       await publishAppReleaseMeta({
         platform: 'h5',
         version,
-        downloadUrl,
+        entryUrl,
         changelog: form.changelog.trim(),
       })
       ElMessage.success('登记成功')
-      form.downloadUrl = ''
+      form.entryUrl = ''
     })
     return
   }

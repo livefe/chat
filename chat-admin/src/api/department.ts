@@ -11,9 +11,7 @@ export interface DepartmentItem {
   statusText: string
   sort: number
   remark: string
-  /** 直属员工数 */
   employeeCount: number
-  /** 含全部下级部门的员工数 */
   totalEmployeeCount: number
   createdAt: string
   updatedAt: string

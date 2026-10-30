@@ -244,6 +244,9 @@ func (c *Conn) Send(payload []byte) error {
 
 func (c *Conn) Set(key string, value any)  { c.attrs.Store(key, value) }
 func (c *Conn) Get(key string) (any, bool) { return c.attrs.Load(key) }
+func (c *Conn) LoadOrStore(key string, value any) (any, bool) {
+	return c.attrs.LoadOrStore(key, value)
+}
 
 func (c *Conn) RemoteAddr() string { return c.raw.RemoteAddr().String() }
 

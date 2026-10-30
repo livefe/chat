@@ -11,7 +11,6 @@ const (
 	SensitiveWordCategoryOther    = "other"
 )
 
-// 命中任一启用的屏蔽词即拒绝发布。
 type SensitiveWord struct {
 	Base
 	Word     string `gorm:"type:varchar(64);not null;uniqueIndex;comment:屏蔽词" json:"word"`

@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
+
 	"app/internal/middleware"
 	"app/internal/service"
 	"app/internal/types"
@@ -82,14 +86,20 @@ func (h *AppReleaseHandler) AdminPolicySave(c *gin.Context) {
 }
 
 func (h *AppReleaseHandler) AdminUpload(c *gin.Context) {
-	platform := c.PostForm("platform")
-	version := c.PostForm("version")
-	changelog := c.PostForm("changelog")
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.AppPackageMaxBytes+multipartOverhead)
 	file, err := c.FormFile("file")
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			response.WriteError(c, errs.Invalid(fmt.Sprintf("安装包大小不能超过 %dMB", service.AppPackageMaxMB)))
+			return
+		}
 		response.WriteError(c, errs.Invalid("请选择安装包文件"))
 		return
 	}
+	platform := c.PostForm("platform")
+	version := c.PostForm("version")
+	changelog := c.PostForm("changelog")
 	f, err := file.Open()
 	if err != nil {
 		response.WriteError(c, errs.Invalid("读取文件失败"))

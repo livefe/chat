@@ -43,6 +43,7 @@ export interface SupportMessageItem {
 
 export interface SupportConfig {
   brandName: string
+  brandAvatarMediaId: number
   brandAvatarUrl: string
   welcomeText: string
   offlineText: string
@@ -155,5 +156,6 @@ export const readSupport = (conversationId: number, lastReadMsgId?: number) =>
 
 export const getSupportConfig = () => request.get<SupportConfig>('/api/admin/support/config')
 
-export const updateSupportConfig = (data: Omit<SupportConfig, 'enabled'> & { enabled: number }) =>
-  request.post<SupportConfig>('/api/admin/support/config', data)
+export const updateSupportConfig = (
+  data: Omit<SupportConfig, 'enabled' | 'brandAvatarUrl'> & { enabled: number },
+) => request.post<SupportConfig>('/api/admin/support/config', data)

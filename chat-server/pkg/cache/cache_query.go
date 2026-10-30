@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const nullSentinel = "__NULL__"
+const NullSentinel = "__NULL__"
 
 type QueryOptions struct {
 	CacheKey          string
@@ -30,7 +30,7 @@ func Query(
 ) error {
 	cachedData, err := cache.Client.Get(ctx, options.CacheKey).Result()
 	if err == nil {
-		if cachedData == nullSentinel {
+		if cachedData == NullSentinel {
 			return gorm.ErrRecordNotFound
 		}
 		if err = json.Unmarshal([]byte(cachedData), result); err == nil {
@@ -41,7 +41,7 @@ func Query(
 	queryResult, err := queryFunc(ctx)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			_ = cache.Client.Set(ctx, options.CacheKey, nullSentinel, options.EmptyRecordExpire).Err()
+			_ = cache.Client.Set(ctx, options.CacheKey, NullSentinel, options.EmptyRecordExpire).Err()
 		}
 		return err
 	}

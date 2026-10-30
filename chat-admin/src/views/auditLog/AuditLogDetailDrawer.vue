@@ -70,7 +70,6 @@ const visible = ref(false)
 const loading = ref(false)
 const detail = ref<AuditLogItem | null>(null)
 
-/** 目标类型 → 列表页菜单及定位参数名。 */
 const TARGET_PAGES: Record<string, { code: PermissionCode; param: string }> = {
   post: { code: PERM.PostPost, param: 'id' },
   room: { code: PERM.ChatRoom, param: 'id' },

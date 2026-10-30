@@ -24,7 +24,6 @@ type SupportListRow struct {
 	CloseNote          string `gorm:"column:close_note"`
 }
 
-// SupportOverviewFilter 的 From/To 为 Unix 秒，进行中按接入时间、已结案按结案时间过滤。
 type SupportOverviewFilter struct {
 	AssigneeEmployeeID uint
 	Keyword            string
@@ -228,7 +227,6 @@ func (r *imSupportStateRepository) HasServedUser(ctx context.Context, userID, em
 	return n > 0, err
 }
 
-// ListAgentEmployeeIDs 返回启用状态且通过启用角色拥有 permissionCode（或拥有超级管理员角色）的员工。
 func (r *imSupportStateRepository) ListAgentEmployeeIDs(ctx context.Context, permissionCode, superRoleCode string) ([]uint, error) {
 	var ids []uint
 	err := database.Conn(ctx, r.db).Table("employee AS e").

@@ -89,7 +89,7 @@ func (s *PostService) Create(ctx context.Context, userID uint, req *types.Create
 	}
 	if len(req.Images) > 0 && s.mediaSvc != nil {
 		ids := parseMediaIDs(post.Images)
-		if _, err := s.mediaSvc.BindMany(ctx, userID, ids, model.MediaKindImage, model.MediaBizPost, post.ID); err != nil {
+		if err := s.mediaSvc.BindMany(ctx, UserUploader(userID), ids, model.MediaKindImage, model.MediaBizPost, post.ID); err != nil {
 			return 0, err
 		}
 	}
@@ -153,7 +153,7 @@ func (s *PostService) Update(ctx context.Context, userID uint, req *types.Update
 		if err != nil {
 			return err
 		}
-		if _, err := s.mediaSvc.ReplaceBizMedia(ctx, userID, ids, model.MediaKindImage, model.MediaBizPost, p.ID); err != nil {
+		if err := s.mediaSvc.ReplaceBizMedia(ctx, UserUploader(userID), ids, model.MediaKindImage, model.MediaBizPost, p.ID); err != nil {
 			return err
 		}
 		imageIDs = ids

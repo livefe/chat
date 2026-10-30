@@ -163,7 +163,6 @@ func (r *messageRepository) List(ctx context.Context, f MessageListFilter) ([]*m
 	return list, total, nil
 }
 
-// contextQuery 与 msg 处于同一会话的消息；附近消息按 nearby 区域圈定，缺少区域时只返回自身。
 func (r *messageRepository) contextQuery(ctx context.Context, msg *model.Message, nearby *GeoBox) *gorm.DB {
 	db := database.Conn(ctx, r.db).Unscoped().Model(&model.Message{})
 	switch msg.Scope {

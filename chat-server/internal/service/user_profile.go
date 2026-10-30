@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"app/internal/model"
+	"app/internal/repository"
 	"app/internal/types"
 	"app/pkg/errs"
 	"app/pkg/logger"
@@ -16,7 +17,7 @@ import (
 )
 
 func (s *UserService) Get(ctx context.Context, userID uint) (*types.UserInfo, error) {
-	user, err := s.userRepo.GetByIDWithCache(ctx, userID)
+	user, err := s.userRepo.GetCached(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errs.NotFound("用户不存在")
@@ -31,7 +32,7 @@ func (s *UserService) Get(ctx context.Context, userID uint) (*types.UserInfo, er
 }
 
 func (s *UserService) ActiveMuted(ctx context.Context, userID uint) (muted bool, err error) {
-	user, err := s.userRepo.GetByIDWithCache(ctx, userID)
+	user, err := s.userRepo.GetCached(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, errs.NotFound("用户不存在")
@@ -49,7 +50,7 @@ func (s *UserService) PublicProfile(ctx context.Context, viewerID, targetID uint
 		return nil, errs.NotFound("用户不存在")
 	}
 	if viewerID == targetID {
-		user, err := s.userRepo.GetByIDWithCache(ctx, targetID)
+		user, err := s.userRepo.GetCached(ctx, targetID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, errs.NotFound("用户不存在")
@@ -70,7 +71,7 @@ func (s *UserService) PublicProfile(ctx context.Context, viewerID, targetID uint
 		}, nil
 	}
 
-	user, err := s.userRepo.GetByIDWithCache(ctx, targetID)
+	user, err := s.userRepo.GetCached(ctx, targetID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errs.NotFound("用户不存在")
@@ -123,50 +124,30 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID uint, req *types
 		}
 		return fmt.Errorf("系统错误，请稍后重试: %w", err)
 	}
+	var upd repository.UserUpdate
 	if req.Nickname != "" {
 		if err := assertClean(s.sensitive, req.Nickname); err != nil {
 			return err
 		}
-		user.Nickname = req.Nickname
+		upd.Nickname = &req.Nickname
 	}
 	if req.AvatarMediaID != nil {
-		newID := *req.AvatarMediaID
-		oldID := user.AvatarMediaID
-		if newID == 0 {
-			user.AvatarMediaID = 0
-			if err := s.userRepo.Update(ctx, user); err != nil {
-				s.log.Error(ctx, "更新用户资料失败", logger.Error(err))
-				return fmt.Errorf("更新失败: %w", err)
-			}
-			if oldID > 0 && s.mediaSvc != nil {
-				_ = s.mediaSvc.UnbindOne(ctx, oldID, model.MediaBizAvatar, userID)
-			}
-			return nil
-		}
-		if s.mediaSvc == nil {
-			return errs.Unavailable("媒体服务不可用", nil)
-		}
-		if _, err := s.mediaSvc.AssertOwn(ctx, userID, newID, model.MediaKindImage); err != nil {
-			return err
-		}
-		user.AvatarMediaID = newID
-		if err := s.userRepo.Update(ctx, user); err != nil {
+		upd.AvatarMediaID = req.AvatarMediaID
+	}
+	persist := func() error {
+		if err := s.userRepo.Update(ctx, userID, upd); err != nil {
 			s.log.Error(ctx, "更新用户资料失败", logger.Error(err))
 			return fmt.Errorf("更新失败: %w", err)
 		}
-		if oldID > 0 && oldID != newID {
-			_ = s.mediaSvc.UnbindOne(ctx, oldID, model.MediaBizAvatar, userID)
-		}
-		if _, err := s.mediaSvc.Bind(ctx, userID, newID, model.MediaKindImage, model.MediaBizAvatar, userID); err != nil {
-			return err
-		}
 		return nil
 	}
-	if err := s.userRepo.Update(ctx, user); err != nil {
-		s.log.Error(ctx, "更新用户资料失败", logger.Error(err))
-		return fmt.Errorf("更新失败: %w", err)
+	if req.AvatarMediaID == nil {
+		return persist()
 	}
-	return nil
+	if s.mediaSvc == nil {
+		return errs.Unavailable("媒体服务不可用", nil)
+	}
+	return s.mediaSvc.ReplaceSingle(ctx, UserUploader(userID), user.AvatarMediaID, *req.AvatarMediaID, model.MediaKindImage, model.MediaBizAvatar, userID, persist)
 }
 
 func (s *UserService) ReportTarget(ctx context.Context, reporterID, targetID uint) (uint, types.ReportContextSnapshot, error) {
@@ -193,7 +174,7 @@ func (s *UserService) GetProfiles(ctx context.Context, ids []uint) (map[uint]typ
 	if len(ids) == 0 {
 		return map[uint]types.UserProfile{}, nil
 	}
-	users, err := s.userRepo.GetByIDsWithCache(ctx, ids)
+	users, err := s.userRepo.GetManyCached(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("调用 GetByIDsWithCache 失败: %w", err)
 	}

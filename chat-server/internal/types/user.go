@@ -1,7 +1,6 @@
 package types
 
 const (
-	CacheUserByMobileKey       = cachePrefix + "user:mobile:%s"
 	CacheUserByIDKey           = cachePrefix + "user:id:%d"
 	CacheChangeMobileTicketKey = cachePrefix + "user:change_mobile_ticket:%d"
 )
@@ -76,7 +75,6 @@ type CreateUserRequest struct {
 	Status   uint8  `json:"status" binding:"oneof=0 1"`
 }
 
-// UpdateUserRequest Mobile 为空表示不修改；账号状态只能走状态接口，以便记录原因。
 type UpdateUserRequest struct {
 	ID       uint   `json:"id" binding:"required"`
 	Mobile   string `json:"mobile" binding:"omitempty,mobile"`
@@ -186,7 +184,6 @@ type UserPunishmentListResponse struct {
 	List  []UserPunishmentItem `json:"list"`
 }
 
-// UserGovernanceSummary 举报审核时展示的被举报用户现状。
 type UserGovernanceSummary struct {
 	UserID          uint   `json:"userId"`
 	Nickname        string `json:"nickname"`

@@ -8,7 +8,6 @@ type SubmitReportRequest struct {
 	Images     []uint `json:"images"`
 }
 
-// AdminReportListRequest 只看待处理时按提交时间正序（先进先出），其余倒序。
 type AdminReportListRequest struct {
 	Status       *uint8 `form:"status"`
 	TargetType   *uint8 `form:"targetType"`
@@ -23,7 +22,6 @@ type AdminReportListRequest struct {
 	PageSize     int    `form:"pageSize" binding:"required,min=1,max=100"`
 }
 
-// AdminReportHandleRequest MuteDuration 为禁言小时数，-1 为永久；ResolveSameTarget 表示同对象的其它待处理举报一并按相同结果结案。
 type AdminReportHandleRequest struct {
 	ID                uint   `json:"id" binding:"required"`
 	Status            uint8  `json:"status" binding:"required,min=1,max=2"`

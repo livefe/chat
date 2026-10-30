@@ -33,7 +33,7 @@ type AuthService struct {
 	cache             *cache.Cache
 	tokenAuth         *auth.Auth
 	smsSvc            *SMSService
-	userRepo          *UserStore
+	userRepo          repository.UserRepository
 	userLoginRepo     repository.UserLoginRecordRepository
 	employeeRepo      repository.EmployeeRepository
 	employeeRoleRepo  repository.EmployeeRoleRepository
@@ -47,7 +47,7 @@ func NewAuthService(
 	c *cache.Cache,
 	tokenAuth *auth.Auth,
 	smsSvc *SMSService,
-	userRepo *UserStore,
+	userRepo repository.UserRepository,
 	userLoginRepo repository.UserLoginRecordRepository,
 	employeeRepo repository.EmployeeRepository,
 	employeeRoleRepo repository.EmployeeRoleRepository,

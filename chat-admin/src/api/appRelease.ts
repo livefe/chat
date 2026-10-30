@@ -48,7 +48,7 @@ export const uploadAppRelease = (
 export const publishAppReleaseMeta = (payload: {
   platform: 'h5'
   version: string
-  downloadUrl: string
+  entryUrl: string
   changelog?: string
 }) => request.post<AppReleaseItem>('/api/admin/app/release/publish-meta', payload)
 

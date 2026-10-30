@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"app/internal/model"
+	"app/internal/repository"
 	"app/internal/types"
 	"app/pkg/cache"
 	"app/pkg/logger"
@@ -22,14 +23,14 @@ const roomPresenceTTL = 90 * time.Second
 type PresenceService struct {
 	log        *logger.Logger
 	cache      *cache.Cache
-	userRepo   *UserStore
+	userRepo   repository.UserRepository
 	instanceID string
 }
 
 func NewPresenceService(
 	log *logger.Logger,
 	c *cache.Cache,
-	userRepo *UserStore,
+	userRepo repository.UserRepository,
 	instanceID string,
 ) *PresenceService {
 	return &PresenceService{
@@ -380,7 +381,7 @@ func (s *PresenceService) NearbyOnlineUserCount(ctx context.Context, lat, lng fl
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	profiles, err := s.userRepo.GetByIDsWithCache(ctx, ids)
+	profiles, err := s.userRepo.GetManyCached(ctx, ids)
 	if err != nil {
 		return 0, fmt.Errorf("调用 GetByIDsWithCache 失败: %w", err)
 	}

@@ -25,7 +25,6 @@ func (r *employeeLoginRecordRepository) Create(ctx context.Context, record *mode
 	return database.Conn(ctx, r.db).Create(record).Error
 }
 
-// 失败的登录尝试未必关联到员工ID，因此同时按手机号匹配。
 func (r *employeeLoginRecordRepository) ListByEmployee(ctx context.Context, employeeID uint, mobile string, page, pageSize int) ([]*model.EmployeeLoginRecord, int64, error) {
 	db := database.Conn(ctx, r.db).Model(&model.EmployeeLoginRecord{}).
 		Where("employee_id = ? OR mobile = ?", employeeID, mobile)

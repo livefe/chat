@@ -39,7 +39,6 @@ func (s *UserService) recordPunishment(ctx context.Context, userID uint, action 
 	})
 }
 
-// RecordContentPunishment 记录删除消息、下架帖子等针对内容的处置。
 func (s *UserService) RecordContentPunishment(ctx context.Context, userID uint, action uint8, meta PunishMeta) error {
 	if userID == 0 {
 		return nil
@@ -58,7 +57,7 @@ func (s *UserService) AdminListPunishments(ctx context.Context, req *types.Admin
 		employeeIDs = append(employeeIDs, row.EmployeeID)
 	}
 	names := map[uint]string{}
-	if ids := uniqueNonZeroIDs(employeeIDs); len(ids) > 0 {
+	if ids := uniqueUints(employeeIDs); len(ids) > 0 {
 		employees, err := s.employeeRepo.GetByIDs(ctx, ids)
 		if err != nil {
 			return nil, fmt.Errorf("查询处罚记录失败: %w", err)
@@ -101,7 +100,6 @@ func punishMuteText(until int64) string {
 	return "至 " + time.Unix(until, 0).Format("2006-01-02 15:04")
 }
 
-// GovernanceSummary 被举报用户的当前状态与处罚次数；举报次数由调用方填充。
 func (s *UserService) GovernanceSummary(ctx context.Context, userID uint) (*types.UserGovernanceSummary, error) {
 	user, err := s.userRepo.GetByIDUnscoped(ctx, userID)
 	if err != nil {

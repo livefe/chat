@@ -1,14 +1,15 @@
 package types
 
 type EmployeeInfo struct {
-	ID         uint   `json:"id"`
-	Mobile     string `json:"mobile"`
-	Name       string `json:"name"`
-	EmployeeNo string `json:"employeeNo"`
-	AvatarURL  string `json:"avatarUrl"`
-	Department string `json:"department"`
-	Status     uint8  `json:"status"`
-	Remark     string `json:"remark"`
+	ID            uint   `json:"id"`
+	Mobile        string `json:"mobile"`
+	Name          string `json:"name"`
+	EmployeeNo    string `json:"employeeNo"`
+	AvatarMediaID uint   `json:"avatarMediaId"`
+	AvatarURL     string `json:"avatarUrl"`
+	Department    string `json:"department"`
+	Status        uint8  `json:"status"`
+	Remark        string `json:"remark"`
 }
 
 type EmployeeListRequest struct {
@@ -64,7 +65,6 @@ type CreateEmployeeRequest struct {
 	Remark       string `json:"remark" binding:"max=255"`
 }
 
-// 头像只能由员工本人修改，状态只能通过状态接口修改。
 type UpdateEmployeeRequest struct {
 	ID           uint   `json:"id" binding:"required"`
 	Mobile       string `json:"mobile" binding:"required,mobile"`
@@ -80,7 +80,7 @@ type UpdateEmployeeStatusRequest struct {
 }
 
 type UpdateMyProfileRequest struct {
-	AvatarURL string `json:"avatarUrl" binding:"max=255"`
+	AvatarMediaID uint `json:"avatarMediaId"`
 }
 
 type AssignEmployeeRolesRequest struct {
@@ -88,12 +88,10 @@ type AssignEmployeeRolesRequest struct {
 	RoleIDs    []uint `json:"roleIds" binding:"required"`
 }
 
-// 不传 employeeId 时只返回启用角色（用于筛选）。
 type EmployeeRoleOptionsRequest struct {
 	EmployeeID uint `form:"employeeId"`
 }
 
-// Options 为全部启用角色，加上该员工已分配但已禁用的角色。
 type EmployeeRoleOptionsResponse struct {
 	Options         []EmployeeRoleBrief `json:"options"`
 	AssignedIDs     []uint              `json:"assignedIds"`

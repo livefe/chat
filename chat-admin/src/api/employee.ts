@@ -5,6 +5,7 @@ export interface EmployeeInfo {
   mobile: string
   name: string
   employeeNo: string
+  avatarMediaId: number
   avatarUrl: string
   department: string
   status: number
@@ -77,7 +78,7 @@ export const getEmployeeList = (params: EmployeeListRequest) =>
 
 export const getEmployeeMe = () => request.get<EmployeeInfo>('/api/admin/employee/me')
 
-export const updateMyProfile = (data: { avatarUrl?: string }) =>
+export const updateMyProfile = (data: { avatarMediaId: number }) =>
   request.post<EmployeeInfo>('/api/admin/employee/me/update', data)
 
 export const uploadMyAvatar = (file: File) => {
@@ -107,7 +108,6 @@ export const updateEmployee = (data: {
 export const updateEmployeeStatus = (id: number, status: number) =>
   request.post('/api/admin/employee/update/status', { id, status })
 
-/** 不传 employeeId 时只返回启用角色，用于筛选。 */
 export const getEmployeeRoleOptions = (employeeId?: number) =>
   request.get<EmployeeRoleOptions>('/api/admin/employee/role-options', { employeeId })
 

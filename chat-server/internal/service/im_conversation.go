@@ -90,6 +90,7 @@ func (s *IMService) ListConversations(ctx context.Context, employeeID uint, req 
 		depIDs = append(depIDs, p.DepartmentID)
 	}
 	depNames := s.departmentNames(ctx, depIDs)
+	avatars := employeeAvatarURLs(ctx, s.mediaSvc, peers)
 	online := s.OnlineEmployees(ctx, peerIDs)
 	unreadMap, _ := s.UnreadMap(ctx, employeeID)
 
@@ -108,7 +109,7 @@ func (s *IMService) ListConversations(ctx context.Context, employeeID uint, req 
 		}
 		if p := peerMap[row.PeerID]; p != nil {
 			item.PeerName = p.Name
-			item.PeerAvatarURL = p.AvatarURL
+			item.PeerAvatarURL = avatars[p.ID]
 			item.PeerDepartmentName = depNames[p.DepartmentID]
 			_, item.PeerOnline = online[p.ID]
 			if item.Title == "" {
@@ -155,7 +156,7 @@ func (s *IMService) conversationItemFor(ctx context.Context, selfID, conversatio
 		Title:              peer.Name,
 		PeerID:             peer.ID,
 		PeerName:           peer.Name,
-		PeerAvatarURL:      peer.AvatarURL,
+		PeerAvatarURL:      s.mediaSvc.ResolveURL(ctx, peer.AvatarMediaID),
 		PeerDepartmentName: s.departmentNames(ctx, []uint{peer.DepartmentID})[peer.DepartmentID],
 		PeerOnline:         online,
 		LastMessageID:      conv.LastMessageID,

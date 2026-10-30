@@ -152,7 +152,6 @@ func (s *ReportService) AdminHandle(ctx context.Context, employeeID uint, req *t
 	return result, nil
 }
 
-// reportPunishReason 处罚记录与警告通知中展示的原因：优先使用处理说明。
 func reportPunishReason(item *model.Report, handleResult string) string {
 	if handleResult != "" {
 		return handleResult
@@ -208,12 +207,12 @@ func (s *ReportService) enrichReportItems(ctx context.Context, list []*model.Rep
 		targetKeys = append(targetKeys, repository.ReportTargetKey{TargetType: item.TargetType, TargetID: item.TargetID})
 	}
 
-	profiles, err := s.userSvc.GetProfiles(ctx, uniqueNonZeroIDs(userIDs))
+	profiles, err := s.userSvc.GetProfiles(ctx, uniqueUints(userIDs))
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
 	employeeMap := make(map[uint]*model.Employee)
-	if ids := uniqueNonZeroIDs(employeeIDs); len(ids) > 0 {
+	if ids := uniqueUints(employeeIDs); len(ids) > 0 {
 		employees, err := s.employeeRepo.GetByIDs(ctx, ids)
 		if err != nil {
 			return nil, fmt.Errorf("查询失败: %w", err)

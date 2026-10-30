@@ -67,7 +67,7 @@ func (s *RoomService) buildAdminRoomItems(ctx context.Context, rooms []*model.Ro
 		}
 		employeeIDs = append(employeeIDs, r.AuditedBy)
 	}
-	profiles, err := s.userSvc.GetProfiles(ctx, uniqueNonZeroIDs(userIDs))
+	profiles, err := s.userSvc.GetProfiles(ctx, uniqueUints(userIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,6 @@ func (s *RoomService) AdminUpdate(ctx context.Context, req *types.UpdateRoomRequ
 	return nil
 }
 
-// roomAuditable 待审核与已驳回（重新审核）的聊天区可以审核。
 func roomAuditable(status uint8) bool {
 	return status == model.RoomStatusPending || status == model.RoomStatusRejected
 }
@@ -195,7 +194,7 @@ func (s *RoomService) AdminBatchAudit(ctx context.Context, employeeID uint, req 
 	if err != nil {
 		return nil, err
 	}
-	ids := uniqueNonZeroIDs(req.IDs)
+	ids := uniqueUints(req.IDs)
 	rooms, err := s.roomRepo.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)

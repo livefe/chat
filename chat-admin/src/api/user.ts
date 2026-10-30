@@ -49,7 +49,6 @@ export const getUserList = (params: UserListRequest) =>
 export const createUser = (data: { mobile: string; nickname: string; status: number }) =>
   request.post('/api/admin/user/create', data)
 
-/** mobile 为空表示不修改手机号。 */
 export const updateUser = (data: { id: number; mobile?: string; nickname: string }) =>
   request.post('/api/admin/user/update', data)
 
@@ -59,7 +58,6 @@ export const updateUserStatus = (id: number, status: number, reason: string) =>
 export const batchUpdateUserStatus = (ids: number[], status: number, reason: string) =>
   request.post<BatchUserResult>('/api/admin/user/batch/status', { ids, status, reason })
 
-/** duration：小时数，-1 永久，0 解除禁言。 */
 export const muteUser = (id: number, duration: number, reason: string) =>
   request.post('/api/admin/user/update/mute', { id, duration, reason })
 
@@ -144,7 +142,6 @@ export interface UserDeviceItem {
 export const getUserDevices = (params: UserSubListRequest) =>
   request.get<PageResponse<UserDeviceItem>>('/api/admin/user/devices', params)
 
-/** 举报审核中展示的被举报用户现状。 */
 export interface UserGovernanceSummary {
   userId: number
   nickname: string

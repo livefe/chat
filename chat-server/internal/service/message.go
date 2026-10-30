@@ -87,7 +87,7 @@ func (s *MessageService) broadcastRecall(ctx context.Context, m *model.Message) 
 	s.broadcast.BroadcastRecall(ctx, m, s.MessageItem(ctx, m))
 }
 
-func prepareOwnedMediaContent(ctx context.Context, mediaSvc *MediaService, ownerID uint, raw string, kind uint8) (string, error) {
+func prepareOwnedMediaContent(ctx context.Context, mediaSvc *MediaService, owner MediaUploader, raw string, kind uint8) (string, error) {
 	mediaID, err := parseMediaIDInput(raw)
 	if err != nil {
 		return "", err
@@ -95,7 +95,7 @@ func prepareOwnedMediaContent(ctx context.Context, mediaSvc *MediaService, owner
 	if mediaSvc == nil {
 		return "", errs.Unavailable("媒体服务不可用", nil)
 	}
-	if _, err := mediaSvc.AssertOwn(ctx, ownerID, mediaID, kind); err != nil {
+	if _, err := mediaSvc.AssertOwn(ctx, owner, mediaID, kind); err != nil {
 		return "", err
 	}
 	stored, err := json.Marshal(messageMediaContent{MediaID: mediaID})
@@ -135,7 +135,7 @@ func (s *MessageService) prepareVoiceContent(ctx context.Context, userID uint, r
 	if s.mediaSvc == nil {
 		return "", errs.Unavailable("媒体服务不可用", nil)
 	}
-	if _, err := s.mediaSvc.AssertOwn(ctx, userID, voice.MediaID, model.MediaKindAudio); err != nil {
+	if _, err := s.mediaSvc.AssertOwn(ctx, UserUploader(userID), voice.MediaID, model.MediaKindAudio); err != nil {
 		return "", err
 	}
 	stored, err := json.Marshal(messageMediaContent{
@@ -148,7 +148,7 @@ func (s *MessageService) prepareVoiceContent(ctx context.Context, userID uint, r
 	return string(stored), nil
 }
 
-func prepareOwnedFileContent(ctx context.Context, mediaSvc *MediaService, ownerID uint, raw string) (string, error) {
+func prepareOwnedFileContent(ctx context.Context, mediaSvc *MediaService, owner MediaUploader, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	var body messageMediaContent
 	if err := json.Unmarshal([]byte(raw), &body); err != nil || body.MediaID == 0 {
@@ -159,7 +159,7 @@ func prepareOwnedFileContent(ctx context.Context, mediaSvc *MediaService, ownerI
 	if mediaSvc == nil {
 		return "", errs.Unavailable("媒体服务不可用", nil)
 	}
-	asset, err := mediaSvc.AssertOwn(ctx, ownerID, mediaID, model.MediaKindFile)
+	asset, err := mediaSvc.AssertOwn(ctx, owner, mediaID, model.MediaKindFile)
 	if err != nil {
 		return "", err
 	}

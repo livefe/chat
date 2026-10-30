@@ -1,7 +1,8 @@
 FROM --platform=linux/amd64 node:24-alpine AS builder
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --registry=${NPM_REGISTRY}
 COPY . .
 RUN npm run build
 FROM --platform=linux/amd64 nginx:1.27-alpine

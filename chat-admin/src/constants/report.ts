@@ -43,7 +43,6 @@ export const REPORT_STATUS_OPTIONS = [
   { label: '已驳回', value: ReportStatus.Rejected },
 ]
 
-/** 列表筛选用，默认「待处理」。 */
 export const REPORT_STATUS_FILTER_OPTIONS = [
   ...REPORT_STATUS_OPTIONS,
   { label: '全部', value: FILTER_ALL },

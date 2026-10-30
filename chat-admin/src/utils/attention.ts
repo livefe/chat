@@ -1,7 +1,5 @@
 import { onUnmounted, reactive, readonly, ref, watch } from 'vue'
 
-/** 新消息提醒：提示音、页面隐藏时的标题计数、桌面通知。偏好保存在 localStorage。 */
-
 const PREFS_KEY = 'admin_attention_prefs'
 const SOUND_GAP_MS = 1500
 const TITLE_PREFIX = /^\(\d+\+?\) /
@@ -37,7 +35,6 @@ export function setAttentionSound(on: boolean) {
   savePrefs()
 }
 
-/** 开启桌面通知需在用户点击时调用，以便浏览器弹出授权。返回最终是否开启。 */
 export async function setAttentionDesktop(on: boolean) {
   if (!on) {
     prefs.desktop = false
@@ -69,12 +66,10 @@ if (typeof document !== 'undefined') {
   })
 }
 
-/** 当前标签页是否可见（共享状态）。 */
 export function usePageVisible() {
   return readonly(visible)
 }
 
-/** 页面隐藏时在标签标题前显示 "(n) "；组件卸载时自动清除。 */
 export function useTitleCount(key: string, count: () => number) {
   watch(
     count,
@@ -135,7 +130,6 @@ function notifyDesktop(title: string, body: string, tag?: string) {
   }
 }
 
-/** 播放提示音并在页面不在前台时弹出桌面通知。 */
 export function alertAttention(title: string, body: string, tag?: string) {
   playSound()
   notifyDesktop(title, body, tag)

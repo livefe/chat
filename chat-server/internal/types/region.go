@@ -16,9 +16,8 @@ type RegionListResponse struct {
 }
 
 type RegionSearchResponse struct {
-	List []RegionItem `json:"list"`
-	// 命中数超过 limit 时为 true
-	Truncated bool `json:"truncated"`
+	List      []RegionItem `json:"list"`
+	Truncated bool         `json:"truncated"`
 }
 
 type RegionChildrenRequest struct {

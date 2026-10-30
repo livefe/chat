@@ -8,7 +8,6 @@ import (
 	"app/pkg/database"
 )
 
-// AdCampaignListFilter 的 From/To 为 Unix 秒，筛选排期与 [From, To) 有交集的计划。
 type AdCampaignListFilter struct {
 	Status         *uint8
 	Keyword        string
@@ -123,7 +122,6 @@ func (r *adCampaignRepository) UpdateStatus(ctx context.Context, id uint, status
 	return database.Conn(ctx, r.db).Model(&model.AdCampaign{}).Where("id = ?", id).Updates(updates).Error
 }
 
-// PauseActive 只暂停投放中的计划，返回实际暂停的条数。
 func (r *adCampaignRepository) PauseActive(ctx context.Context, ids []uint) (int64, error) {
 	res := database.Conn(ctx, r.db).Model(&model.AdCampaign{}).
 		Where("id IN ? AND status = ?", ids, model.AdStatusActive).

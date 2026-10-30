@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *MediaService) AssertOwn(ctx context.Context, userID, mediaID uint, expectKind uint8) (*model.MediaAsset, error) {
+func (s *MediaService) AssertOwn(ctx context.Context, uploader MediaUploader, mediaID uint, expectKind uint8) (*model.MediaAsset, error) {
 	if mediaID == 0 {
 		return nil, errs.Invalid("媒体无效")
 	}
@@ -24,10 +24,10 @@ func (s *MediaService) AssertOwn(ctx context.Context, userID, mediaID uint, expe
 		}
 		return nil, fmt.Errorf("系统错误，请稍后重试: %w", err)
 	}
-	if asset.Status == model.MediaStatusDeleted {
+	if !mediaUsable(asset) {
 		return nil, errs.Invalid("媒体已失效")
 	}
-	if asset.UserID != userID {
+	if asset.UploaderKind != uploader.Kind || asset.UploaderID != uploader.ID {
 		return nil, errs.Forbidden("无权使用该媒体")
 	}
 	if expectKind != 0 && asset.Kind != expectKind {
@@ -36,69 +36,99 @@ func (s *MediaService) AssertOwn(ctx context.Context, userID, mediaID uint, expe
 	return asset, nil
 }
 
-func (s *MediaService) Bind(ctx context.Context, userID, mediaID uint, expectKind uint8, bizType string, bizID uint) (*model.MediaAsset, error) {
-	asset, err := s.AssertOwn(ctx, userID, mediaID, expectKind)
-	if err != nil {
-		return nil, err
-	}
+func (s *MediaService) Bind(ctx context.Context, uploader MediaUploader, mediaID uint, expectKind uint8, bizType string, bizID uint) error {
 	if bizType == "" || bizID == 0 {
-		return nil, errs.Invalid("业务引用无效")
+		return errs.Invalid("业务引用无效")
 	}
-	if err := s.usageRepo.Create(ctx, &model.MediaUsage{
-		MediaID: mediaID,
-		BizType: bizType,
-		BizID:   bizID,
-		UserID:  userID,
-	}); err != nil {
-		s.log.Error(ctx, "绑定媒体失败", logger.Error(err))
-		return nil, fmt.Errorf("绑定媒体失败: %w", err)
+	if _, err := s.AssertOwn(ctx, uploader, mediaID, expectKind); err != nil {
+		return err
 	}
-	if asset.Status == model.MediaStatusUploaded {
-		now := time.Now()
-		asset.Status = model.MediaStatusBound
-		asset.BoundAt = &now
-		if err := s.assetRepo.Update(ctx, asset); err != nil {
-			s.log.Error(ctx, "更新媒体状态失败", logger.Error(err))
-			return nil, fmt.Errorf("绑定媒体失败: %w", err)
-		}
-	}
-	return asset, nil
+	return s.attach(ctx, mediaID, bizType, bizID)
 }
 
-func (s *MediaService) BindMany(ctx context.Context, userID uint, mediaIDs []uint, expectKind uint8, bizType string, bizID uint) ([]*model.MediaAsset, error) {
-	out := make([]*model.MediaAsset, 0, len(mediaIDs))
-	seen := make(map[uint]struct{}, len(mediaIDs))
-	for _, id := range mediaIDs {
-		if id == 0 {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		asset, err := s.Bind(ctx, userID, id, expectKind, bizType, bizID)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, asset)
+func (s *MediaService) attach(ctx context.Context, mediaID uint, bizType string, bizID uint) error {
+	if err := s.usageRepo.Create(ctx, &model.MediaUsage{MediaID: mediaID, BizType: bizType, BizID: bizID}); err != nil {
+		s.log.Error(ctx, "绑定媒体失败", logger.Uint("mediaId", mediaID), logger.Error(err))
+		return fmt.Errorf("绑定媒体失败: %w", err)
 	}
-	return out, nil
+	if err := s.assetRepo.PromoteBound(ctx, mediaID, time.Now()); err != nil {
+		s.log.Error(ctx, "更新媒体状态失败", logger.Uint("mediaId", mediaID), logger.Error(err))
+		return fmt.Errorf("绑定媒体失败: %w", err)
+	}
+	bound, err := s.assetRepo.LockBound(ctx, mediaID)
+	if err != nil {
+		s.log.Error(ctx, "确认媒体状态失败", logger.Uint("mediaId", mediaID), logger.Error(err))
+		return fmt.Errorf("绑定媒体失败: %w", err)
+	}
+	if !bound {
+		if err := s.usageRepo.Delete(ctx, mediaID, bizType, bizID); err != nil {
+			s.log.Error(ctx, "撤回媒体引用失败", logger.Uint("mediaId", mediaID), logger.Error(err))
+		}
+		return errs.Invalid("媒体已失效")
+	}
+	return nil
 }
 
-func (s *MediaService) ReplaceBizMedia(ctx context.Context, userID uint, mediaIDs []uint, expectKind uint8, bizType string, bizID uint) ([]*model.MediaAsset, error) {
+func (s *MediaService) BindShared(ctx context.Context, mediaID uint, bizType string, bizID uint) error {
+	if mediaID == 0 || bizType == "" || bizID == 0 {
+		return errs.Invalid("业务引用无效")
+	}
+	return s.attach(ctx, mediaID, bizType, bizID)
+}
+
+func (s *MediaService) BindMany(ctx context.Context, uploader MediaUploader, mediaIDs []uint, expectKind uint8, bizType string, bizID uint) error {
+	for _, id := range uniqueUints(mediaIDs) {
+		if err := s.Bind(ctx, uploader, id, expectKind, bizType, bizID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *MediaService) ReplaceBizMedia(ctx context.Context, uploader MediaUploader, mediaIDs []uint, expectKind uint8, bizType string, bizID uint) error {
+	if bizType == "" || bizID == 0 {
+		return errs.Invalid("业务引用无效")
+	}
 	oldIDs, err := s.usageRepo.ListMediaIDsByBiz(ctx, bizType, bizID)
 	if err != nil {
 		s.log.Error(ctx, "查询业务媒体引用失败", logger.Error(err))
-		return nil, fmt.Errorf("更新媒体失败: %w", err)
+		return fmt.Errorf("更新媒体失败: %w", err)
 	}
-	if err := s.usageRepo.DeleteByBiz(ctx, bizType, bizID); err != nil {
-		s.log.Error(ctx, "清理业务媒体引用失败", logger.Error(err))
-		return nil, fmt.Errorf("更新媒体失败: %w", err)
+	wanted := uniqueUints(mediaIDs)
+	for _, id := range wanted {
+		if containsUint(oldIDs, id) {
+			continue
+		}
+		if err := s.Bind(ctx, uploader, id, expectKind, bizType, bizID); err != nil {
+			return err
+		}
 	}
 	for _, id := range oldIDs {
-		_ = s.releaseIfUnused(ctx, id)
+		if containsUint(wanted, id) {
+			continue
+		}
+		if err := s.UnbindOne(ctx, id, bizType, bizID); err != nil {
+			return err
+		}
 	}
-	return s.BindMany(ctx, userID, mediaIDs, expectKind, bizType, bizID)
+	return nil
+}
+
+func (s *MediaService) ReplaceSingle(ctx context.Context, uploader MediaUploader, oldID, newID uint, expectKind uint8, bizType string, bizID uint, persist func() error) error {
+	if newID != 0 && newID != oldID {
+		if err := s.Bind(ctx, uploader, newID, expectKind, bizType, bizID); err != nil {
+			return err
+		}
+	}
+	if err := persist(); err != nil {
+		return err
+	}
+	if oldID != 0 && oldID != newID {
+		if err := s.UnbindOne(ctx, oldID, bizType, bizID); err != nil {
+			s.log.Warn(ctx, "解绑旧媒体失败", logger.Uint("mediaId", oldID), logger.Error(err))
+		}
+	}
+	return nil
 }
 
 func (s *MediaService) UnbindOne(ctx context.Context, mediaID uint, bizType string, bizID uint) error {
@@ -109,37 +139,9 @@ func (s *MediaService) UnbindOne(ctx context.Context, mediaID uint, bizType stri
 		s.log.Error(ctx, "解除媒体引用失败", logger.Error(err), logger.Uint("mediaId", mediaID))
 		return fmt.Errorf("解除媒体引用失败: %w", err)
 	}
-	if err := s.releaseIfUnused(ctx, mediaID); err != nil {
+	if err := s.assetRepo.MarkDeletedIfUnused(ctx, mediaID); err != nil {
 		s.log.Error(ctx, "释放媒体失败", logger.Error(err), logger.Uint("mediaId", mediaID))
 		return fmt.Errorf("解除媒体引用失败: %w", err)
-	}
-	return nil
-}
-
-func (s *MediaService) releaseIfUnused(ctx context.Context, mediaID uint) error {
-	n, err := s.usageRepo.CountByMediaID(ctx, mediaID)
-	if err != nil {
-		return fmt.Errorf("调用 CountUsages 失败: %w", err)
-	}
-	if n > 0 {
-		return nil
-	}
-	asset, err := s.assetRepo.GetByID(ctx, mediaID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
-		}
-		return err
-	}
-	if asset.Status == model.MediaStatusDeleted {
-		return nil
-	}
-	asset.Status = model.MediaStatusDeleted
-	if err := s.assetRepo.Update(ctx, asset); err != nil {
-		return err
-	}
-	if err := s.client.Delete(ctx, asset.ObjectKey); err != nil {
-		s.log.Warn(ctx, "删除媒体文件失败", logger.String("key", asset.ObjectKey), logger.Error(err))
 	}
 	return nil
 }

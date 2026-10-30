@@ -11,9 +11,7 @@ import (
 
 type MediaUsageRepository interface {
 	Create(ctx context.Context, usage *model.MediaUsage) error
-	DeleteByBiz(ctx context.Context, bizType string, bizID uint) error
 	Delete(ctx context.Context, mediaID uint, bizType string, bizID uint) error
-	CountByMediaID(ctx context.Context, mediaID uint) (int64, error)
 	ListMediaIDsByBiz(ctx context.Context, bizType string, bizID uint) ([]uint, error)
 }
 
@@ -29,22 +27,10 @@ func (r *mediaUsageRepository) Create(ctx context.Context, usage *model.MediaUsa
 	return database.Conn(ctx, r.db).Clauses(clause.OnConflict{DoNothing: true}).Create(usage).Error
 }
 
-func (r *mediaUsageRepository) DeleteByBiz(ctx context.Context, bizType string, bizID uint) error {
-	return database.Conn(ctx, r.db).
-		Where("biz_type = ? AND biz_id = ?", bizType, bizID).
-		Delete(&model.MediaUsage{}).Error
-}
-
 func (r *mediaUsageRepository) Delete(ctx context.Context, mediaID uint, bizType string, bizID uint) error {
 	return database.Conn(ctx, r.db).
 		Where("media_id = ? AND biz_type = ? AND biz_id = ?", mediaID, bizType, bizID).
 		Delete(&model.MediaUsage{}).Error
-}
-
-func (r *mediaUsageRepository) CountByMediaID(ctx context.Context, mediaID uint) (int64, error) {
-	var n int64
-	err := database.Conn(ctx, r.db).Model(&model.MediaUsage{}).Where("media_id = ?", mediaID).Count(&n).Error
-	return n, err
 }
 
 func (r *mediaUsageRepository) ListMediaIDsByBiz(ctx context.Context, bizType string, bizID uint) ([]uint, error) {

@@ -73,9 +73,10 @@ func (s *EmployeeService) AdminList(ctx context.Context, req *types.EmployeeList
 		return nil, fmt.Errorf("查询员工列表失败: %w", err)
 	}
 
+	avatars := employeeAvatarURLs(ctx, s.mediaSvc, employees)
 	list := make([]types.EmployeeItem, 0, len(employees))
 	for _, e := range employees {
-		list = append(list, toEmployeeItem(e, rolesByEmployee[e.ID], departmentNameByID[e.DepartmentID], lastLogins[e.ID]))
+		list = append(list, toEmployeeItem(e, rolesByEmployee[e.ID], departmentNameByID[e.DepartmentID], avatars[e.ID], lastLogins[e.ID]))
 	}
 	return &types.EmployeeListResponse{Total: total, List: list}, nil
 }
@@ -186,13 +187,17 @@ func (s *EmployeeService) AdminCreate(ctx context.Context, req *types.CreateEmpl
 	return employee.ID, nil
 }
 
-func (s *EmployeeService) AdminUpdate(ctx context.Context, req *types.UpdateEmployeeRequest) error {
+func (s *EmployeeService) AdminUpdate(ctx context.Context, operatorID uint, req *types.UpdateEmployeeRequest) error {
 	employee, err := s.getEmployee(ctx, req.ID)
 	if err != nil {
 		return err
 	}
 
-	if req.Mobile != employee.Mobile {
+	mobileChanged := req.Mobile != employee.Mobile
+	if err := s.assertCanUpdateEmployee(ctx, operatorID, employee.ID, mobileChanged); err != nil {
+		return err
+	}
+	if mobileChanged {
 		other, err := s.employeeRepo.GetByMobile(ctx, req.Mobile)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("系统错误，请稍后重试: %w", err)
@@ -217,6 +222,33 @@ func (s *EmployeeService) AdminUpdate(ctx context.Context, req *types.UpdateEmpl
 	if err := s.employeeRepo.Update(ctx, employee); err != nil {
 		s.log.Error(ctx, "更新员工失败", logger.Error(err))
 		return fmt.Errorf("更新员工失败: %w", err)
+	}
+	if mobileChanged && operatorID != employee.ID {
+		s.authSvc.Revoke(ctx, auth.SubjectTypeEmployee, employee.ID)
+	}
+	return nil
+}
+
+func (s *EmployeeService) assertCanUpdateEmployee(ctx context.Context, operatorID, targetID uint, mobileChanged bool) error {
+	if operatorID == targetID {
+		return nil
+	}
+	if mobileChanged {
+		return s.permSvc.AssertCanManageEmployee(ctx, operatorID, targetID)
+	}
+	isOperatorSuper, err := s.permSvc.IsSuperAdmin(ctx, operatorID)
+	if err != nil {
+		return fmt.Errorf("校验操作者权限失败: %w", err)
+	}
+	if isOperatorSuper {
+		return nil
+	}
+	isTargetSuper, err := s.permSvc.IsSuperAdmin(ctx, targetID)
+	if err != nil {
+		return fmt.Errorf("校验权限失败: %w", err)
+	}
+	if isTargetSuper {
+		return errs.Forbidden("仅超级管理员可修改超级管理员信息")
 	}
 	return nil
 }
@@ -308,6 +340,9 @@ func (s *EmployeeService) AdminRoleOptions(ctx context.Context, operatorID, empl
 }
 
 func (s *EmployeeService) AdminAssignRoles(ctx context.Context, operatorID uint, req *types.AssignEmployeeRolesRequest) error {
+	if operatorID == req.EmployeeID {
+		return errs.Forbidden("不能修改自己的角色")
+	}
 	if _, err := s.getEmployee(ctx, req.EmployeeID); err != nil {
 		return err
 	}
@@ -341,7 +376,6 @@ func (s *EmployeeService) AdminAssignRoles(ctx context.Context, operatorID uint,
 			return errs.NotFound("部分角色不存在")
 		}
 		for _, role := range roles {
-			// 已分配的禁用角色允许原样保留，只禁止新分配禁用角色。
 			if role.Status != model.RoleStatusEnabled && !containsUint(existingRoleIDs, role.ID) {
 				return errs.Invalid(fmt.Sprintf("角色「%s」已禁用，不能分配", role.Name))
 			}
@@ -365,6 +399,18 @@ func (s *EmployeeService) AdminAssignRoles(ctx context.Context, operatorID uint,
 	}
 	if targetHadSuperAdmin && !containsSuperAdminRole {
 		return errs.Forbidden("不能移除超级管理员角色")
+	}
+	if err := s.permSvc.AssertCanManageEmployee(ctx, operatorID, req.EmployeeID); err != nil {
+		return err
+	}
+	addedRoleIDs := make([]uint, 0, len(roleIDs))
+	for _, rid := range roleIDs {
+		if !containsUint(existingRoleIDs, rid) {
+			addedRoleIDs = append(addedRoleIDs, rid)
+		}
+	}
+	if err := s.permSvc.AssertCanGrantRoles(ctx, operatorID, addedRoleIDs); err != nil {
+		return err
 	}
 
 	items := make([]*model.EmployeeRole, 0, len(roleIDs))

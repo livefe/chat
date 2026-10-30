@@ -8,6 +8,7 @@ import (
 
 	"app/internal/model"
 	"app/internal/types"
+	"app/pkg/errs"
 	"app/pkg/logger"
 
 	"gorm.io/gorm"
@@ -109,6 +110,81 @@ func (s *PermissionService) HasPermissionCode(ctx context.Context, employeeID ui
 		}
 	}
 	return false, nil
+}
+
+func (s *PermissionService) AssertCanManageEmployee(ctx context.Context, operatorID, targetID uint) error {
+	operatorSuper, scope, err := s.permissionScope(ctx, operatorID)
+	if err != nil {
+		return err
+	}
+	if operatorSuper {
+		return nil
+	}
+	targetSuper, targetPerms, err := s.EmployeeAccess(ctx, targetID)
+	if err != nil {
+		return fmt.Errorf("校验目标员工权限失败: %w", err)
+	}
+	if targetSuper {
+		return errs.Forbidden("仅超级管理员可管理超级管理员")
+	}
+	if !scopeCovers(scope, targetPerms) {
+		return errs.Forbidden("该员工的权限超出你的权限范围，无法操作")
+	}
+	return nil
+}
+
+func (s *PermissionService) AssertCanGrantRoles(ctx context.Context, operatorID uint, roleIDs []uint) error {
+	if len(roleIDs) == 0 {
+		return nil
+	}
+	operatorSuper, scope, err := s.permissionScope(ctx, operatorID)
+	if err != nil {
+		return err
+	}
+	if operatorSuper {
+		return nil
+	}
+	permIDs, err := s.rolePermissionRepo.GetPermissionIDsByRoleIDs(ctx, roleIDs)
+	if err != nil {
+		return fmt.Errorf("查询角色权限失败: %w", err)
+	}
+	if len(permIDs) == 0 {
+		return nil
+	}
+	perms, err := s.permissionRepo.GetByIDs(ctx, permIDs)
+	if err != nil {
+		return fmt.Errorf("查询权限详情失败: %w", err)
+	}
+	if !scopeCovers(scope, filterCapability(filterEnabled(perms))) {
+		return errs.Forbidden("不能分配超出自身权限范围的角色")
+	}
+	return nil
+}
+
+func (s *PermissionService) permissionScope(ctx context.Context, employeeID uint) (bool, map[uint]struct{}, error) {
+	isSuper, perms, err := s.EmployeeAccess(ctx, employeeID)
+	if err != nil {
+		return false, nil, fmt.Errorf("校验操作者权限失败: %w", err)
+	}
+	scope := make(map[uint]struct{}, len(perms))
+	for _, p := range perms {
+		if p != nil {
+			scope[p.ID] = struct{}{}
+		}
+	}
+	return isSuper, scope, nil
+}
+
+func scopeCovers(scope map[uint]struct{}, perms []*model.Permission) bool {
+	for _, p := range perms {
+		if p == nil {
+			continue
+		}
+		if _, ok := scope[p.ID]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *PermissionService) EnabledPermissions(ctx context.Context, employeeID uint) ([]*model.Permission, error) {

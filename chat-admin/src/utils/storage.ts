@@ -48,7 +48,6 @@ export interface RecentVisit {
 const RECENT_VISITS_PREFIX = 'admin_recent_visits:'
 const RECENT_VISITS_MAX = 6
 
-/** 最近访问按员工分别保存，退出登录不清除。 */
 export function readRecentVisits(employeeId: number): RecentVisit[] {
   const list = readJsonStorage<unknown>(RECENT_VISITS_PREFIX + employeeId, [])
   if (!Array.isArray(list)) return []

@@ -13,7 +13,6 @@ export interface AdminConversationItem {
   createdAt: string
 }
 
-/** userId 与 peerUserId 同时填写时精确匹配这一对用户；时间范围作用于最后活跃时间。 */
 export interface AdminConversationListRequest {
   page: number
   pageSize: number

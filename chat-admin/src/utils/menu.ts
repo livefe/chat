@@ -116,7 +116,6 @@ export function buildHomeSections(permissions: PermissionItem[]): HomeSection[] 
   return sections.filter((s) => s.items.length > 0)
 }
 
-/** 按标题过滤菜单：命中的分组保留全部子项，未命中的分组只保留命中的子项。 */
 export function filterMenus(menus: MenuItem[], keyword: string): MenuItem[] {
   const kw = keyword.trim().toLowerCase()
   if (!kw) return menus
@@ -132,7 +131,6 @@ export function filterMenus(menus: MenuItem[], keyword: string): MenuItem[] {
   return out
 }
 
-/** 可导航的叶子菜单（按展示顺序）。 */
 export function flattenMenuLeaves(menus: MenuItem[]): MenuItem[] {
   const out: MenuItem[] = []
   for (const m of menus) {

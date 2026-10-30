@@ -28,6 +28,7 @@ type Config struct {
 	Auth      auth.Config      `mapstructure:"auth"`
 	WebSocket websocket.Config `mapstructure:"websocket"`
 	Storage   storage.Config   `mapstructure:"storage"`
+	Media     MediaConfig      `mapstructure:"media"`
 	Push      PushConfig       `mapstructure:"push"`
 	Ad        AdConfig         `mapstructure:"ad"`
 }
@@ -78,6 +79,38 @@ func (s *Server) Validate() error {
 
 type PushConfig struct {
 	Xiaomi push.XiaomiConfig `mapstructure:"xiaomi"`
+}
+
+type MediaConfig struct {
+	MaxImageMB     int    `mapstructure:"max_image_mb"`
+	MaxVideoMB     int    `mapstructure:"max_video_mb"`
+	MaxAudioMB     int    `mapstructure:"max_audio_mb"`
+	MaxFileMB      int    `mapstructure:"max_file_mb"`
+	PathPrefix     string `mapstructure:"path_prefix"`
+	OrphanTTLHours int    `mapstructure:"orphan_ttl_hours"`
+}
+
+func (m *MediaConfig) Validate() error {
+	if m.MaxImageMB <= 0 {
+		return fmt.Errorf("media.max_image_mb 未配置")
+	}
+	if m.MaxVideoMB <= 0 {
+		return fmt.Errorf("media.max_video_mb 未配置")
+	}
+	if m.MaxAudioMB <= 0 {
+		return fmt.Errorf("media.max_audio_mb 未配置")
+	}
+	if m.MaxFileMB <= 0 {
+		return fmt.Errorf("media.max_file_mb 未配置")
+	}
+	prefix := strings.Trim(strings.TrimSpace(m.PathPrefix), "/")
+	if prefix == "" || strings.Contains(prefix, "..") {
+		return fmt.Errorf("media.path_prefix 未配置或非法")
+	}
+	if m.OrphanTTLHours <= 0 {
+		return fmt.Errorf("media.orphan_ttl_hours 未配置")
+	}
+	return nil
 }
 
 type AdConfig struct {
@@ -145,6 +178,7 @@ func (c *Config) Validate() error {
 	appendErr(c.WebSocket.Validate())
 	appendErr(c.SMS.Validate())
 	appendErr(c.Storage.Validate())
+	appendErr(c.Media.Validate())
 	appendErr(c.Push.Xiaomi.Validate())
 	appendErr(c.Ad.Validate())
 

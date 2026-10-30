@@ -5,7 +5,6 @@ import { useEmployeeStore } from '@/stores/employee'
 import { PERM, type PermissionCode } from '@/constants/permission'
 import { findMenuPath } from '@/utils/navigation'
 
-/** 菜单有角标时，点击进入列表所带的筛选条件。 */
 export const PENDING_QUERY: Partial<Record<PermissionCode, Record<string, string>>> = {
   [PERM.PostPost]: { status: '0', sort: 'asc' },
   [PERM.ChatRoom]: { status: '0' },
@@ -23,7 +22,6 @@ const counts = reactive<AdminPendingCounts>({
   postAuditPending: 0,
 })
 
-/** 菜单编码 → 角标数字；客服工作台显示「排队 + 我的未读」。 */
 const BADGE_SOURCES: [PermissionCode, () => number][] = [
   [PERM.ImChat, () => counts.imUnread],
   [PERM.ImSupport, () => counts.supportQueue + counts.supportUnread],
@@ -62,7 +60,6 @@ async function refreshBadges(opts?: { force?: boolean }) {
       Object.assign(counts, data)
       lastFetchedAt = Date.now()
     } catch {
-      // 角标刷新失败不打扰用户，下个轮询周期重试
     } finally {
       inflight = null
     }
@@ -111,7 +108,6 @@ export function useAdminBadges() {
     return badgeByPath.value.get(path)?.count || undefined
   }
 
-  /** 菜单有待办角标时返回对应的筛选条件，否则返回 undefined。 */
   function pendingQueryFor(path: string | undefined) {
     if (!path) return undefined
     const hit = badgeByPath.value.get(path)

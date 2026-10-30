@@ -20,7 +20,6 @@ export const FEEDBACK_STATUS_OPTIONS = [
   { label: '已关闭', value: FeedbackStatus.Closed },
 ]
 
-/** 列表筛选用，默认「待处理」以与菜单角标一致。 */
 export const FEEDBACK_STATUS_FILTER_OPTIONS = [
   ...FEEDBACK_STATUS_OPTIONS,
   { label: '全部', value: FILTER_ALL },

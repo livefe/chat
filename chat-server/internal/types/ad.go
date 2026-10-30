@@ -116,7 +116,6 @@ type AdminAdCampaignListResponse struct {
 	List  []AdminAdCampaignItem `json:"list"`
 }
 
-// AdminAdUpdateStatusRequest 的 Status：1 提交审核、2 恢复投放（仅已暂停）、4 暂停、5 结束。
 type AdminAdUpdateStatusRequest struct {
 	ID     uint  `json:"id" binding:"required"`
 	Status uint8 `json:"status" binding:"required,oneof=1 2 4 5"`

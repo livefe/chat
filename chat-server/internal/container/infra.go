@@ -9,6 +9,7 @@ import (
 	"app/pkg/config"
 	"app/pkg/database"
 	"app/pkg/logger"
+	"app/pkg/storage"
 	"app/pkg/utils"
 )
 
@@ -20,6 +21,7 @@ type Infra struct {
 	Log        *logger.Logger
 	DB         *database.DB
 	Cache      *cache.Cache
+	Storage    storage.Client
 	Auth       *auth.Auth
 
 	closers []closerFn
@@ -70,6 +72,13 @@ func NewInfra() (in *Infra, err error) {
 	}
 	in.Cache = c
 	in.addCloser(func() error { return c.Close() })
+
+	store, e := storage.New(&cfg.Storage)
+	if e != nil {
+		err = fmt.Errorf("对象存储初始化失败: %w", e)
+		return
+	}
+	in.Storage = store
 
 	in.Auth = auth.NewAuth(&cfg.Auth)
 

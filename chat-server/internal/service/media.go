@@ -2,55 +2,62 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	"app/internal/model"
 	"app/internal/repository"
+	"app/pkg/config"
 	"app/pkg/logger"
 	"app/pkg/storage"
 )
 
-type MediaService struct {
-	log            *logger.Logger
-	client         storage.Client
-	assetRepo      repository.MediaAssetRepository
-	usageRepo      repository.MediaUsageRepository
-	maxSizeMB      int
-	maxVideoSizeMB int
-	maxAudioSizeMB int
-	pathPrefix     string
-	orphanTTL      time.Duration
+type MediaUploader struct {
+	Kind uint8
+	ID   uint
 }
 
-func NewMediaService(log *logger.Logger, client storage.Client, cfg *storage.Config, assetRepo repository.MediaAssetRepository, usageRepo repository.MediaUsageRepository) (*MediaService, error) {
-	if client == nil {
-		return nil, fmt.Errorf("对象存储未初始化")
+func UserUploader(id uint) MediaUploader {
+	return MediaUploader{Kind: model.MediaUploaderUser, ID: id}
+}
+
+func EmployeeUploader(id uint) MediaUploader {
+	return MediaUploader{Kind: model.MediaUploaderEmployee, ID: id}
+}
+
+type MediaService struct {
+	log        *logger.Logger
+	client     storage.Client
+	assetRepo  repository.MediaAssetRepository
+	usageRepo  repository.MediaUsageRepository
+	limitMB    map[uint8]int
+	pathPrefix string
+	orphanTTL  time.Duration
+}
+
+func NewMediaService(log *logger.Logger, client storage.Client, cfg config.MediaConfig, assetRepo repository.MediaAssetRepository, usageRepo repository.MediaUsageRepository) *MediaService {
+	return &MediaService{
+		log:       log,
+		client:    client,
+		assetRepo: assetRepo,
+		usageRepo: usageRepo,
+		limitMB: map[uint8]int{
+			model.MediaKindImage: cfg.MaxImageMB,
+			model.MediaKindVideo: cfg.MaxVideoMB,
+			model.MediaKindAudio: cfg.MaxAudioMB,
+			model.MediaKindFile:  cfg.MaxFileMB,
+		},
+		pathPrefix: strings.Trim(strings.TrimSpace(cfg.PathPrefix), "/"),
+		orphanTTL:  time.Duration(cfg.OrphanTTLHours) * time.Hour,
 	}
-	svc := &MediaService{
-		log:            log,
-		client:         client,
-		assetRepo:      assetRepo,
-		usageRepo:      usageRepo,
-		maxVideoSizeMB: 50,
-		maxAudioSizeMB: 5,
-		orphanTTL:      24 * time.Hour,
-	}
-	if cfg != nil {
-		svc.maxSizeMB = cfg.MaxSizeMB
-		if cfg.MaxVideoSizeMB > 0 {
-			svc.maxVideoSizeMB = cfg.MaxVideoSizeMB
-		}
-		if cfg.MaxAudioSizeMB > 0 {
-			svc.maxAudioSizeMB = cfg.MaxAudioSizeMB
-		}
-		svc.pathPrefix = strings.Trim(strings.TrimSpace(cfg.PathPrefix), "/")
-		if cfg.OrphanTTLHours > 0 {
-			svc.orphanTTL = time.Duration(cfg.OrphanTTLHours) * time.Hour
-		}
-	}
-	return svc, nil
+}
+
+func (s *MediaService) MaxUploadBytes(kind uint8) int64 {
+	return int64(s.limitMB[kind]) << 20
+}
+
+func mediaUsable(asset *model.MediaAsset) bool {
+	return asset.Status == model.MediaStatusUploaded || asset.Status == model.MediaStatusBound
 }
 
 func (s *MediaService) ResolveURL(ctx context.Context, mediaID uint) string {
@@ -58,10 +65,10 @@ func (s *MediaService) ResolveURL(ctx context.Context, mediaID uint) string {
 		return ""
 	}
 	asset, err := s.assetRepo.GetByID(ctx, mediaID)
-	if err != nil || asset.Status == model.MediaStatusDeleted {
+	if err != nil || !mediaUsable(asset) {
 		return ""
 	}
-	return asset.URL
+	return s.client.URL(asset.ObjectKey)
 }
 
 func (s *MediaService) ResolveURLs(ctx context.Context, ids []uint) map[uint]string {
@@ -86,10 +93,10 @@ func (s *MediaService) ResolveURLs(ctx context.Context, ids []uint) map[uint]str
 		return out
 	}
 	for _, a := range list {
-		if a.Status == model.MediaStatusDeleted {
+		if !mediaUsable(a) {
 			continue
 		}
-		out[a.ID] = a.URL
+		out[a.ID] = s.client.URL(a.ObjectKey)
 	}
 	return out
 }

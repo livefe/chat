@@ -4,7 +4,6 @@ export const REGION_LEVEL_OPTIONS = [
   { label: '区县级', value: 3 },
 ]
 
-/** 后台区划树只展开到区县级。 */
 export const REGION_LEAF_LEVEL = 3
 
 const REGION_LEVEL_TEXT: Record<number, string> = {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"app/internal/types"
 	"app/pkg/cache"
@@ -130,13 +131,13 @@ func (s *ChatHub) AtCapacity() bool {
 func (s *RealtimeService) OnClose(c *websocket.Conn) {
 	ctx := connCtx(c)
 	uid := connUserID(c)
-	for rid := range connRooms(c) {
+	s.hub.Unregister(c)
+	for _, rid := range connRooms(c) {
 		s.leaveRoomOnConn(ctx, c, uid, rid)
 	}
-	for pid := range connPosts(c) {
+	for _, pid := range connPosts(c) {
 		s.leavePostOnConn(ctx, c, uid, pid)
 	}
-	s.hub.Unregister(c)
 	remaining := s.hub.CountByID(uid)
 	if remaining == 0 {
 		s.presence.ClearOnline(ctx, uid)
@@ -272,50 +273,103 @@ func connLocation(c *websocket.Conn) (lat, lng float64) {
 	return lat, lng
 }
 
-func connIDSet(c *websocket.Conn, attr string) map[uint]struct{} {
+type connIDSet struct {
+	mu  sync.Mutex
+	ids map[uint]struct{}
+}
+
+func (s *connIDSet) add(id uint) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.ids[id]; ok {
+		return false
+	}
+	if s.ids == nil {
+		s.ids = make(map[uint]struct{}, 4)
+	}
+	s.ids[id] = struct{}{}
+	return true
+}
+
+func (s *connIDSet) remove(id uint) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.ids[id]; !ok {
+		return false
+	}
+	delete(s.ids, id)
+	return true
+}
+
+func (s *connIDSet) has(id uint) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.ids[id]
+	return ok
+}
+
+func (s *connIDSet) snapshot() []uint {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]uint, 0, len(s.ids))
+	for id := range s.ids {
+		out = append(out, id)
+	}
+	return out
+}
+
+func loadConnIDSet(c *websocket.Conn, attr string) *connIDSet {
 	v, ok := c.Get(attr)
 	if !ok {
 		return nil
 	}
-	m, _ := v.(map[uint]struct{})
-	return m
+	set, _ := v.(*connIDSet)
+	return set
 }
 
-func trackID(c *websocket.Conn, attr string, id uint) {
-	m := connIDSet(c, attr)
-	if m == nil {
-		m = make(map[uint]struct{}, 4)
-		c.Set(attr, m)
-	}
-	m[id] = struct{}{}
+func loadOrCreateConnIDSet(c *websocket.Conn, attr string) *connIDSet {
+	v, _ := c.LoadOrStore(attr, &connIDSet{})
+	return v.(*connIDSet)
 }
 
-func untrackID(c *websocket.Conn, attr string, id uint) {
-	m := connIDSet(c, attr)
-	if m == nil {
-		return
+func trackID(c *websocket.Conn, attr string, id uint) bool {
+	return loadOrCreateConnIDSet(c, attr).add(id)
+}
+
+func untrackID(c *websocket.Conn, attr string, id uint) bool {
+	set := loadConnIDSet(c, attr)
+	if set == nil {
+		return false
 	}
-	delete(m, id)
+	return set.remove(id)
 }
 
 func idTracked(c *websocket.Conn, attr string, id uint) bool {
-	_, ok := connIDSet(c, attr)[id]
-	return ok
+	set := loadConnIDSet(c, attr)
+	return set != nil && set.has(id)
 }
 
-func connRooms(c *websocket.Conn) map[uint]struct{} { return connIDSet(c, attrRooms) }
+func trackedIDs(c *websocket.Conn, attr string) []uint {
+	set := loadConnIDSet(c, attr)
+	if set == nil {
+		return nil
+	}
+	return set.snapshot()
+}
 
-func connPosts(c *websocket.Conn) map[uint]struct{} { return connIDSet(c, attrPosts) }
+func connRooms(c *websocket.Conn) []uint { return trackedIDs(c, attrRooms) }
 
-func trackRoom(c *websocket.Conn, roomID uint) { trackID(c, attrRooms, roomID) }
+func connPosts(c *websocket.Conn) []uint { return trackedIDs(c, attrPosts) }
 
-func untrackRoom(c *websocket.Conn, roomID uint) { untrackID(c, attrRooms, roomID) }
+func trackRoom(c *websocket.Conn, roomID uint) bool { return trackID(c, attrRooms, roomID) }
+
+func untrackRoom(c *websocket.Conn, roomID uint) bool { return untrackID(c, attrRooms, roomID) }
 
 func roomTracked(c *websocket.Conn, roomID uint) bool { return idTracked(c, attrRooms, roomID) }
 
-func trackPost(c *websocket.Conn, postID uint) { trackID(c, attrPosts, postID) }
+func trackPost(c *websocket.Conn, postID uint) bool { return trackID(c, attrPosts, postID) }
 
-func untrackPost(c *websocket.Conn, postID uint) { untrackID(c, attrPosts, postID) }
+func untrackPost(c *websocket.Conn, postID uint) bool { return untrackID(c, attrPosts, postID) }
 
 func postTracked(c *websocket.Conn, postID uint) bool { return idTracked(c, attrPosts, postID) }
 

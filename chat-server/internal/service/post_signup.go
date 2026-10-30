@@ -528,7 +528,7 @@ func (s *PostService) AdminListUserSignups(ctx context.Context, req *types.Admin
 	for _, item := range list {
 		postIDs = append(postIDs, item.PostID)
 	}
-	posts, err := s.postRepo.GetByIDsUnscoped(ctx, uniqueNonZeroIDs(postIDs))
+	posts, err := s.postRepo.GetByIDsUnscoped(ctx, uniqueUints(postIDs))
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
@@ -564,7 +564,6 @@ func (s *PostService) AdminListUserSignups(ctx context.Context, req *types.Admin
 	return &types.AdminUserSignupListResponse{Total: total, List: items}, nil
 }
 
-// buildSignupList 后台视角可按手机号检索并返回脱敏手机号；发布者视角只能按昵称检索、不返回手机号。
 func (s *PostService) buildSignupList(ctx context.Context, p *model.Post, req *types.AdminPostSignupListRequest, admin bool) (*types.AdminPostSignupListResponse, error) {
 	extras, _ := s.extrasRepo.GetByPostID(ctx, p.ID)
 	if extras == nil || !extras.NeedSignup {

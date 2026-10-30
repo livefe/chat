@@ -17,7 +17,6 @@ import (
 
 const noticeCloseReason = "system_notice"
 
-// NotifyUser 以系统消息写入用户最近一次客服会话；用户没有客服会话时创建一个已结案的会话承载通知，不进入排队。
 func (s *SupportService) NotifyUser(ctx context.Context, userID uint, text string) error {
 	st, err := s.supportStateRepo.GetLatestByUserID(ctx, userID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

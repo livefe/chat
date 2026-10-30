@@ -330,7 +330,6 @@ function syncUrl() {
   void router.replace({ path: route.path, query: q })
 }
 
-/** 从地址栏恢复筛选条件，返回需要打开的会话 ID。 */
 function applyRoute() {
   const q = route.query
   const tab = firstQuery(q.tab) as SideTab
@@ -403,7 +402,6 @@ async function openSessionById(id: number) {
   }
 }
 
-/** 旁听时同步会话状态（例如排队会话被他人接入）。 */
 async function refreshActiveSession() {
   const id = active.value?.id
   if (!id) return

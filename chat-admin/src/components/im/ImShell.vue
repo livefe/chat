@@ -2,9 +2,7 @@
 export interface ImShellTab {
   key: string
   label: string
-  /** 会话数量 */
   count?: number
-  /** 未读消息数，以红色角标显示 */
   unread?: number
   warn?: boolean
 }

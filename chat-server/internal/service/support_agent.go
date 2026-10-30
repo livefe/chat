@@ -119,7 +119,6 @@ func (s *SupportService) AdminListByUser(ctx context.Context, employeeID uint, r
 	return s.toUserSessionList(ctx, rows, total), nil
 }
 
-// AdminListHistory 返回指定会话所属用户的其他客服会话，供坐席了解来访历史。
 func (s *SupportService) AdminListHistory(ctx context.Context, employeeID uint, req *types.SupportHistoryQuery) (*types.SupportUserSessionListResponse, error) {
 	st, _, err := s.assertAgentAccess(ctx, employeeID, req.ConversationID)
 	if err != nil {
@@ -132,7 +131,6 @@ func (s *SupportService) AdminListHistory(ctx context.Context, employeeID uint, 
 	return s.toUserSessionList(ctx, rows, total), nil
 }
 
-// AdminListAgents 返回可接待客服的员工（角色含接入权限或超级管理员），并标注是否在线。
 func (s *SupportService) AdminListAgents(ctx context.Context) (*types.SupportAgentListResponse, error) {
 	ids, err := s.supportStateRepo.ListAgentEmployeeIDs(ctx, permCodeSupportAccept, types.SuperAdminRoleCode)
 	if err != nil {
@@ -147,6 +145,7 @@ func (s *SupportService) AdminListAgents(ctx context.Context) (*types.SupportAge
 		depIDs = append(depIDs, e.DepartmentID)
 	}
 	depNames := s.imSvc.departmentNames(ctx, depIDs)
+	avatars := employeeAvatarURLs(ctx, s.mediaSvc, emps)
 	online := s.imSvc.OnlineEmployees(ctx, ids)
 	list := make([]types.SupportAgentItem, 0, len(emps))
 	for _, e := range emps {
@@ -154,7 +153,7 @@ func (s *SupportService) AdminListAgents(ctx context.Context) (*types.SupportAge
 		list = append(list, types.SupportAgentItem{
 			ID:             e.ID,
 			Name:           e.Name,
-			AvatarURL:      e.AvatarURL,
+			AvatarURL:      avatars[e.ID],
 			DepartmentName: depNames[e.DepartmentID],
 			Online:         on,
 		})
@@ -391,7 +390,6 @@ func (s *SupportService) AdminSend(ctx context.Context, employeeID uint, req *ty
 	return s.sendAs(ctx, model.IMPrincipalEmployee, employeeID, req)
 }
 
-// AdminRead 只处理当前坐席自己的未读；督导旁观他人会话不产生已读记录。
 func (s *SupportService) AdminRead(ctx context.Context, employeeID uint, req *types.SupportReadRequest) error {
 	st, err := s.supportStateRepo.GetByConversationID(ctx, req.ConversationID)
 	if err != nil {

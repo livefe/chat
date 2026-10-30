@@ -65,7 +65,7 @@ func (s *IMService) CommitOutgoing(ctx context.Context, d IMDraft) (*types.IMMes
 		if d.ContentType == 0 {
 			return nil, errs.Invalid("消息类型无效")
 		}
-		prepared, err := s.prepareOutgoingContent(ctx, d.SenderID, d.ContentType, d.Raw)
+		prepared, err := s.prepareOutgoingContent(ctx, imMediaUploader(d.SenderKind, d.SenderID), d.ContentType, d.Raw)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +252,14 @@ func (s *IMService) Recall(ctx context.Context, employeeID, messageID uint) (con
 	return msg.ConversationID, ids, nil
 }
 
-func (s *IMService) prepareOutgoingContent(ctx context.Context, ownerID uint, contentType uint8, raw string) (string, error) {
+func imMediaUploader(senderKind uint8, senderID uint) MediaUploader {
+	if senderKind == model.IMPrincipalUser {
+		return UserUploader(senderID)
+	}
+	return EmployeeUploader(senderID)
+}
+
+func (s *IMService) prepareOutgoingContent(ctx context.Context, owner MediaUploader, contentType uint8, raw string) (string, error) {
 	switch contentType {
 	case model.MessageContentTypeText:
 		content := strings.TrimSpace(raw)
@@ -267,11 +274,11 @@ func (s *IMService) prepareOutgoingContent(ctx context.Context, ownerID uint, co
 		}
 		return content, nil
 	case model.MessageContentTypeImage:
-		return prepareOwnedMediaContent(ctx, s.mediaSvc, ownerID, raw, model.MediaKindImage)
+		return prepareOwnedMediaContent(ctx, s.mediaSvc, owner, raw, model.MediaKindImage)
 	case model.MessageContentTypeVideo:
-		return prepareOwnedMediaContent(ctx, s.mediaSvc, ownerID, raw, model.MediaKindVideo)
+		return prepareOwnedMediaContent(ctx, s.mediaSvc, owner, raw, model.MediaKindVideo)
 	case model.MessageContentTypeFile:
-		return prepareOwnedFileContent(ctx, s.mediaSvc, ownerID, raw)
+		return prepareOwnedFileContent(ctx, s.mediaSvc, owner, raw)
 	default:
 		return "", errs.Invalid("不支持的消息类型")
 	}
@@ -289,6 +296,5 @@ func (s *IMService) bindMedia(ctx context.Context, msg *model.IMMessage) error {
 	if err != nil || mediaID == 0 {
 		return errs.Invalid("媒体无效")
 	}
-	_, err = s.mediaSvc.Bind(ctx, msg.SenderID, mediaID, kind, model.MediaBizIMMessage, msg.ID)
-	return err
+	return s.mediaSvc.Bind(ctx, imMediaUploader(msg.SenderKind, msg.SenderID), mediaID, kind, model.MediaBizIMMessage, msg.ID)
 }

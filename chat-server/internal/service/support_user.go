@@ -21,13 +21,8 @@ func (s *SupportService) GetProfile(ctx context.Context) (*types.SupportProfileR
 	if err != nil {
 		return nil, err
 	}
-	return &types.SupportProfileResponse{
-		BrandName:      cfg.BrandName,
-		BrandAvatarURL: cfg.BrandAvatarURL,
-		WelcomeText:    cfg.WelcomeText,
-		OfflineText:    cfg.OfflineText,
-		Enabled:        cfg.Enabled == 1,
-	}, nil
+	profile := s.toProfile(ctx, cfg)
+	return &profile, nil
 }
 
 func (s *SupportService) GetCurrent(ctx context.Context, userID uint) (*types.SupportSessionItem, error) {

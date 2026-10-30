@@ -30,12 +30,11 @@ const (
 )
 
 type SignupListFilter struct {
-	PostID  uint
-	Status  *uint8
-	CheckIn *uint8
-	UserID  *uint
-	Keyword string
-	// KeywordMatchMobile 为 false 时关键词只匹配昵称（发布者端不允许按手机号检索报名人）。
+	PostID             uint
+	Status             *uint8
+	CheckIn            *uint8
+	UserID             *uint
+	Keyword            string
 	KeywordMatchMobile bool
 	SortField          string
 	SortDesc           bool

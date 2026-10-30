@@ -105,7 +105,6 @@ async function handleBatchClose() {
   }
 }
 
-/** ?detailId=<反馈ID> 打开详情弹窗，打开后从地址栏移除。 */
 function openDetailFromRoute() {
   const raw = route.query.detailId
   const id = Number(Array.isArray(raw) ? raw[0] : raw)

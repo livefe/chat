@@ -23,12 +23,10 @@ export interface UserActionTarget {
 
 export interface UserFormModel {
   id: number
-  /** 编辑时为脱敏号码，仅用于提示。 */
   maskedMobile: string
   nickname: string
 }
 
-/** 禁言、编辑弹窗全局只挂载一份（由 UserDrawer 承载），各页面通过 useUserActions 打开。 */
 const muteDialog = reactive({ visible: false, users: [] as UserActionTarget[] })
 const formDialog = reactive({
   visible: false,

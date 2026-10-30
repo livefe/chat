@@ -76,7 +76,6 @@ export interface AdDailyStatItem {
 export interface UploadMediaResponse {
   id: number
   url: string
-  key: string
   kind: string
   mimeType: string
   sizeBytes: number
@@ -94,7 +93,6 @@ export const getAdCampaignDetail = (id: number) =>
 export const saveAdCampaign = (data: AdCampaignSaveRequest & { id?: number }) =>
   request.post<{ id: number }>('/api/admin/ad/campaign/save', data)
 
-/** status：1 提交审核、2 恢复投放（仅已暂停）、4 暂停、5 结束 */
 export const updateAdCampaignStatus = (data: { id: number; status: number }) =>
   request.post('/api/admin/ad/campaign/update/status', data)
 

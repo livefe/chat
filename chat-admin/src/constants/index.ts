@@ -13,7 +13,6 @@ export const STATUS_OPTIONS = [
 
 export const DEFAULT_PAGE_SIZE = 20
 
-/** 列表默认带状态筛选时，用于表达「全部」的取值（可写入地址栏）。 */
 export const FILTER_ALL = -1
 
 export const PAGE_SIZES = [10, 20, 50, 100]
@@ -22,7 +21,6 @@ export const PAGINATION_LAYOUT = 'total, sizes, prev, pager, next, jumper'
 
 export const DATETIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
 
-/** datetimerange 手动选日期时，起止时间默认取整天。 */
 export const DATE_RANGE_DEFAULT_TIME: [Date, Date] = [
   new Date(2000, 0, 1, 0, 0, 0),
   new Date(2000, 0, 1, 23, 59, 59),
@@ -46,7 +44,6 @@ function daysAgo(n: number) {
   return d
 }
 
-/** el-date-picker（daterange / datetimerange）的快捷选项。 */
 export const DATE_RANGE_SHORTCUTS = [
   { text: '今天', value: () => [startOfDay(new Date()), endOfDay(new Date())] },
   { text: '昨天', value: () => [startOfDay(daysAgo(1)), endOfDay(daysAgo(1))] },

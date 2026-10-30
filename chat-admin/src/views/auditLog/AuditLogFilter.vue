@@ -165,9 +165,7 @@ watch(
     try {
       const { data } = await searchAuditEmployees({ id })
       employeeOptions.value = [...data, ...employeeOptions.value]
-    } catch {
-      // 回显失败时下拉框仅显示 ID，不影响筛选
-    }
+    } catch {}
   },
   { immediate: true },
 )

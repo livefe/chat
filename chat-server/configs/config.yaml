@@ -77,18 +77,20 @@ sms:
 
 storage:
   provider: "local"
-  max_size_mb: 10
-  max_video_size_mb: 50
-  max_audio_size_mb: 5
-  path_prefix: "uploads"
-  orphan_ttl_hours: 24
   tencent:
     secret_id: ""
     secret_key: ""
     region: "ap-guangzhou"
-    default_bucket: ""
-    use_domain_map: false
-    buckets: {}
+    bucket: ""
+    domain: ""
+
+media:
+  max_image_mb: 10
+  max_video_mb: 50
+  max_audio_mb: 5
+  max_file_mb: 20
+  path_prefix: "uploads"
+  orphan_ttl_hours: 24
 
 push:
   xiaomi:

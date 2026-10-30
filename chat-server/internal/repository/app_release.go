@@ -92,7 +92,6 @@ func (r *appReleaseRepository) List(ctx context.Context, platform string, page, 
 	return list, total, err
 }
 
-// DeleteNotCurrent 删除非当前对外的版本记录；记录不存在或为当前版本时返回 gorm.ErrRecordNotFound。
 func (r *appReleaseRepository) DeleteNotCurrent(ctx context.Context, id uint) error {
 	res := database.Conn(ctx, r.db).Where("id = ? AND is_current = 0", id).Delete(&model.AppRelease{})
 	if res.Error != nil {

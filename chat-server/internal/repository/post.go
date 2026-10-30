@@ -111,7 +111,6 @@ func (r *postRepository) GetByIDsUnscoped(ctx context.Context, ids []uint) ([]*m
 	return list, nil
 }
 
-// contentLikePattern 生成 %kw% 模式，并转义用户输入中的 LIKE 通配符。
 func contentLikePattern(kw string) string {
 	return "%" + likeEscaper.Replace(kw) + "%"
 }

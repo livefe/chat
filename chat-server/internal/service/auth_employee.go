@@ -92,7 +92,7 @@ func (s *AuthService) LoginEmployee(ctx context.Context, req *types.EmployeeLogi
 	return &types.EmployeeLoginResponse{
 		AccessToken:  pair.AccessToken,
 		RefreshToken: pair.RefreshToken,
-		Employee:     toEmployeeInfo(employee, departmentName),
+		Employee:     toEmployeeInfo(employee, departmentName, s.mediaSvc.ResolveURL(ctx, employee.AvatarMediaID)),
 	}, nil
 }
 

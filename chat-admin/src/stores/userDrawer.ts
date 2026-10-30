@@ -15,9 +15,7 @@ export type UserDrawerTab =
 export const useUserDrawerStore = defineStore('userDrawer', () => {
   const visible = ref(false)
   const userId = ref(0)
-  /** 每次打开或用户数据被改动时递增，抽屉据此重新加载。 */
   const version = ref(0)
-  /** 仅在用户数据被改动时递增，列表页据此刷新。 */
   const changed = ref(0)
   const tab = ref<UserDrawerTab>('overview')
 

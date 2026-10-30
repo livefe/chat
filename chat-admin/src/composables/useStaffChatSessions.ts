@@ -89,7 +89,6 @@ export function useStaffChatSessions() {
     }
   }
 
-  /** silent 刷新只替换第一页并原地更新已有条目，不出现加载遮罩。 */
   async function loadSessions(opts?: LoadOptions) {
     const silent = opts?.silent === true
     const append = opts?.append === true
@@ -197,7 +196,6 @@ export function useStaffChatSessions() {
     }
   }
 
-  /** 页面可见时才上报已读，避免后台挂着页面把消息“读掉”。 */
   async function markRead() {
     const conv = active.value
     if (!conv || !canRead.value || !pageVisible.value) return

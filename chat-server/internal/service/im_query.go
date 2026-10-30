@@ -41,13 +41,14 @@ func (s *IMService) ListContacts(ctx context.Context, selfID uint, req *types.IM
 	}
 
 	depIDs := make([]uint, 0, len(list))
+	avatars := employeeAvatarURLs(ctx, s.mediaSvc, list)
 	items := make([]types.IMContactItem, 0, len(list))
 	for _, e := range list {
 		depIDs = append(depIDs, e.DepartmentID)
 		items = append(items, types.IMContactItem{
 			ID:           e.ID,
 			Name:         e.Name,
-			AvatarURL:    e.AvatarURL,
+			AvatarURL:    avatars[e.ID],
 			DepartmentID: e.DepartmentID,
 		})
 	}
@@ -154,9 +155,15 @@ func (s *IMService) toMessageItems(ctx context.Context, msgs []*model.IMMessage)
 		urlMap = s.mediaSvc.ResolveURLs(ctx, refs.mediaIDs)
 	}
 
+	senders := make([]*model.Employee, 0, len(empMap))
+	for _, e := range empMap {
+		senders = append(senders, e)
+	}
+	avatars := employeeAvatarURLs(ctx, s.mediaSvc, senders)
+
 	items := make([]types.IMMessageItem, 0, len(msgs))
 	for _, m := range msgs {
-		items = append(items, toIMMessageItem(m, empMap, replyMap, urlMap))
+		items = append(items, toIMMessageItem(m, empMap, avatars, replyMap, urlMap))
 	}
 	return items, nil
 }
@@ -194,7 +201,7 @@ func (s *IMService) loadReplyTargets(ctx context.Context, ids []uint, empMap map
 	return out
 }
 
-func toIMMessageItem(m *model.IMMessage, empMap map[uint]*model.Employee, replyMap map[uint]*model.IMMessage, urlMap map[uint]string) types.IMMessageItem {
+func toIMMessageItem(m *model.IMMessage, empMap map[uint]*model.Employee, avatars map[uint]string, replyMap map[uint]*model.IMMessage, urlMap map[uint]string) types.IMMessageItem {
 	item := types.IMMessageItem{
 		ID:             m.ID,
 		ConversationID: m.ConversationID,
@@ -209,7 +216,7 @@ func toIMMessageItem(m *model.IMMessage, empMap map[uint]*model.Employee, replyM
 	}
 	if e := empMap[m.SenderID]; e != nil {
 		item.SenderName = e.Name
-		item.SenderAvatarURL = e.AvatarURL
+		item.SenderAvatarURL = avatars[e.ID]
 	}
 	if item.Recalled {
 		item.Content = ""

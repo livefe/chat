@@ -29,7 +29,8 @@ type SupportQuickReplyItem struct {
 
 type SupportAdminConfigResponse struct {
 	SupportProfileResponse
-	QuickReplies []SupportQuickReplyItem `json:"quickReplies"`
+	BrandAvatarMediaID uint                    `json:"brandAvatarMediaId"`
+	QuickReplies       []SupportQuickReplyItem `json:"quickReplies"`
 }
 
 type SupportQuickReplyListResponse struct {
@@ -182,10 +183,10 @@ type SupportCloseRequest struct {
 }
 
 type SupportConfigUpdateRequest struct {
-	BrandName      string                  `json:"brandName" binding:"max=32"`
-	BrandAvatarURL string                  `json:"brandAvatarUrl" binding:"max=255"`
-	WelcomeText    string                  `json:"welcomeText" binding:"max=500"`
-	OfflineText    string                  `json:"offlineText" binding:"max=500"`
-	Enabled        *uint8                  `json:"enabled" binding:"omitempty,oneof=0 1"`
-	QuickReplies   []SupportQuickReplyItem `json:"quickReplies" binding:"max=50,dive"`
+	BrandName          string                  `json:"brandName" binding:"max=32"`
+	BrandAvatarMediaID uint                    `json:"brandAvatarMediaId"`
+	WelcomeText        string                  `json:"welcomeText" binding:"max=500"`
+	OfflineText        string                  `json:"offlineText" binding:"max=500"`
+	Enabled            *uint8                  `json:"enabled" binding:"omitempty,oneof=0 1"`
+	QuickReplies       []SupportQuickReplyItem `json:"quickReplies" binding:"max=50,dive"`
 }
