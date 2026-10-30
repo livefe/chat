@@ -146,14 +146,8 @@ func sniffAudioMIME(header []byte) (mimeType, ext string, ok bool) {
 	if len(header) >= 4 && header[0] == 0x1A && header[1] == 0x45 && header[2] == 0xDF && header[3] == 0xA3 {
 		return "audio/webm", ".webm", true
 	}
-	if len(header) >= 12 && string(header[4:8]) == "ftyp" {
-		brand := strings.TrimSpace(string(header[8:12]))
-		switch brand {
-		case "M4A", "M4B", "M4P", "F4A", "F4B", "mp4a":
-			return "audio/mp4", ".m4a", true
-		default:
-			return "", "", false
-		}
+	if len(header) >= 8 && string(header[4:8]) == "ftyp" {
+		return "audio/mp4", ".m4a", true
 	}
 	if len(header) >= 4 && string(header[0:4]) == "OggS" {
 		return "audio/ogg", ".ogg", true
